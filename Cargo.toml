@@ -1,0 +1,7 @@
+[package]
+name = "yui"
+version = "0.0.1"
+authors = ["skanehira"]
+edition = "2024"
+
+[dependencies]
