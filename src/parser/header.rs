@@ -1,8 +1,6 @@
-use super::Elf;
-use super::{
-    Class, Data, Header, Ident, IdentVersion, Machine, OSABI, Type, Version, error::ParseError,
-};
 use crate::bail_nom_error;
+use crate::elf::header::{Class, Data, Header, Ident, IdentVersion, Machine, OSABI, Type, Version};
+use crate::parser::error::ParseError;
 use nom::Parser as _;
 use nom::combinator::map_res;
 use nom::multi::count;
@@ -15,6 +13,111 @@ const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46]; // 0x7f 'E' 'L' 'F'
 const ELF_IDENT_HEADER_SIZE: usize = 16;
 
 type ParseResult<'a, T> = IResult<&'a [u8], T, ParseError>;
+
+impl TryFrom<u8> for Class {
+    type Error = ParseError;
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Bit32),
+            2 => Ok(Self::Bit64),
+            3 => Ok(Self::Num),
+            _ => Err(ParseError::InvalidClass(b)),
+        }
+    }
+}
+
+impl TryFrom<u8> for Data {
+    type Error = ParseError;
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Lsb),
+            2 => Ok(Self::Msb),
+            _ => Err(ParseError::InvalidData(b)),
+        }
+    }
+}
+
+impl TryFrom<u8> for IdentVersion {
+    type Error = ParseError;
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Current),
+            2 => Ok(Self::Num),
+            _ => Err(ParseError::InvalidIdentVersion(b)),
+        }
+    }
+}
+
+impl TryFrom<u8> for OSABI {
+    type Error = ParseError;
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::SystemV),
+            1 => Ok(Self::HpUx),
+            2 => Ok(Self::NetBsd),
+            3 => Ok(Self::Gnu),
+            6 => Ok(Self::Solaris),
+            7 => Ok(Self::Aix),
+            8 => Ok(Self::Irix),
+            9 => Ok(Self::FreeBsd),
+            10 => Ok(Self::Tru64),
+            11 => Ok(Self::Modesto),
+            12 => Ok(Self::OpenBsd),
+            64 => Ok(Self::ArmAeabi),
+            97 => Ok(Self::Arm),
+            255 => Ok(Self::Standalone),
+            _ => Err(ParseError::InvalidOSABI(b)),
+        }
+    }
+}
+
+impl TryFrom<u16> for Type {
+    type Error = ParseError;
+    fn try_from(b: u16) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Rel),
+            2 => Ok(Self::Exec),
+            3 => Ok(Self::Dyn),
+            4 => Ok(Self::Core),
+            5 => Ok(Self::Num),
+            0xfe00 => Ok(Self::Loos),
+            0xfeff => Ok(Self::Hios),
+            0xff00 => Ok(Self::Loproc),
+            0xffff => Ok(Self::Hiproc),
+            _ => Err(ParseError::InvalidType(b)),
+        }
+    }
+}
+
+impl TryFrom<u16> for Machine {
+    type Error = ParseError;
+    fn try_from(b: u16) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            62 => Ok(Self::X86_64),
+            183 => Ok(Self::AArch64),
+            243 => Ok(Self::RiscV),
+            253 => Ok(Self::Num),
+            _ => Err(ParseError::InvalidMachine(b)),
+        }
+    }
+}
+
+impl TryFrom<u32> for Version {
+    type Error = ParseError;
+    fn try_from(b: u32) -> Result<Self, Self::Error> {
+        match b {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Current),
+            2 => Ok(Self::Num),
+            _ => Err(ParseError::InvalidVersion(b)),
+        }
+    }
+}
 
 fn parse_elf_class(raw: &[u8]) -> ParseResult<Class> {
     map_res(le_u8, |b: u8| Class::try_from(b)).parse(raw)
@@ -75,7 +178,7 @@ fn parse_magic_number(raw: &[u8]) -> IResult<&[u8], (), ParseError> {
     Ok((&raw[4..], ()))
 }
 
-fn parse_elf_header(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
+pub fn parse(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
     if raw.len() < ELF_IDENT_HEADER_SIZE {
         bail_nom_error!(ParseError::InvalidHeaderSize(raw.len() as u8));
     }
@@ -115,24 +218,10 @@ fn parse_elf_header(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
     ))
 }
 
-pub fn parse_elf(raw: &[u8]) -> Result<Elf, ParseError> {
-    let header = parse_elf_header(raw)
-        .map(|(_, header)| header)
-        .map_err(|e| match e {
-            nom::Err::Error(e) => e,
-            nom::Err::Failure(e) => e,
-            nom::Err::Incomplete(e) => ParseError::Nom(format!("incomplete: {:?}", e)),
-        })?;
-    Ok(Elf {
-        header,
-        sections: vec![],
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elf::{Machine, Type, Version};
+    use crate::elf::header::{Machine, Type, Version};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -153,7 +242,7 @@ mod tests {
     #[test]
     fn should_error_invalid_magic_number() {
         let input: &[u8] = &[0u8; 16];
-        let err = parse_elf_header(input).unwrap_err();
+        let err = parse(input).unwrap_err();
         assert_eq!(
             err,
             nom::Err::Error(ParseError::FileTypeNotElf([0, 0, 0, 0]))
@@ -163,7 +252,7 @@ mod tests {
     #[test]
     fn should_parse_elf_header() {
         let raw = include_bytes!("./fixtures/sub.o");
-        let (_, ident) = parse_elf_header(raw).unwrap();
+        let (_, ident) = parse(raw).unwrap();
         assert_eq!(
             ident,
             Header {
