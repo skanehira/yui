@@ -1,5 +1,6 @@
-extern void hello();
+#include <stdio.h>
+extern int x;
 
 int main() {
-	hello();
+	printf("x = %d\n", x);
 }

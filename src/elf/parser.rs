@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn should_parse_elf_header() {
-        let raw = include_bytes!("./fixtures/hello.o");
+        let raw = include_bytes!("./fixtures/sub.o");
         let (_, ident) = parse_elf_header(raw).unwrap();
         assert_eq!(
             ident,
@@ -163,14 +163,14 @@ mod tests {
                 version: ElfVersion::Current,
                 entry_address: 0,
                 program_header_offset: 0,
-                section_header_offset: 776,
+                section_header_offset: 416,
                 flags: 0,
                 header_size: 64,
                 program_header_size: 0,
                 program_header_num: 0,
                 section_header_size: 64,
-                section_header_num: 13,
-                section_header_string_table_idx: 12,
+                section_header_num: 9,
+                section_header_string_table_idx: 8,
             }
         );
     }
