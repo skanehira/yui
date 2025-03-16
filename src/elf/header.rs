@@ -88,20 +88,18 @@ pub enum Version {
 
 #[derive(Default, Debug, PartialEq, Eq)]
 pub struct Header {
-    pub ident: Ident,
-    pub r#type: Type,
-    pub machine: Machine,
-    pub version: Version,
-    pub entry_address: u64,
-    pub program_header_offset: u64,
-    pub section_header_offset: u64,
-    pub flags: u32,
-    pub header_size: u16,
-    pub program_header_size: u16,
-    pub program_header_num: u16,
-    pub section_header_size: u16,
-    pub section_header_num: u16,
-    pub section_header_string_table_idx: u16,
+    pub ident: Ident,     /* Magic number and other info */
+    pub r#type: Type,     /* Object file type */
+    pub machine: Machine, /* Architecture */
+    pub version: Version, /* Object file version */
+    pub entry: u64,       /* Entry point virtual address */
+    pub phoff: u64,       /* Program header table file offset */
+    pub shoff: u64,       /* Section header table file offset */
+    pub flags: u32,       /* Processor-specific flags */
+    pub ehsize: u16,      /* ELF header size in bytes */
+    pub phentsize: u16,   /* Program header table entry size */
+    pub phnum: u16,       /* Program header table entry count */
+    pub shentsize: u16,   /* Section header table entry size */
+    pub shnum: u16,       /* Section header table entry count */
+    pub shstrndx: u16,    /* Section header string table index */
 }
-
-
