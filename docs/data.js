@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742119036653,
+  "lastUpdate": 1742120582855,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -149,6 +149,36 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_elf_header",
             "value": 91.18,
             "range": "± 3.13",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "71fea23fdfc3c00ac68daeed51bce44ddb8b8140",
+          "message": "Refactor ELF Header Parsing\n\n- Updated field names in `Header` struct for clarity and consistency with ELF specification.\n- Modified `parse_elf` function in `src/parser.rs` to return `IResult` for better error handling.\n- Adjusted `parse` function in `src/parser/header.rs` to align with new `Header` field names.\n- Updated tests in `src/parser/header.rs` to reflect changes in `Header` struct field names.",
+          "timestamp": "2025-03-16T19:21:48+09:00",
+          "tree_id": "cc4c73b3fb177bdb3c9f7a6935f2f88e92ff2829",
+          "url": "https://github.com/skanehira/yui/commit/71fea23fdfc3c00ac68daeed51bce44ddb8b8140"
+        },
+        "date": 1742120582579,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.01,
+            "range": "± 3.36",
             "unit": "ns/iter"
           }
         ]
