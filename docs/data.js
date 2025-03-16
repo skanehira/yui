@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742117833916,
+  "lastUpdate": 1742119036653,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -119,6 +119,36 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_elf_header",
             "value": 90.66,
             "range": "± 1.35",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "c16afd86f402cc955553de356a5c98372de886f0",
+          "message": "Refactor ELF module and update benchmarks\n\n- Updated GitHub Actions workflow to not fail on alert.\n- Refactored ELF module by moving enums and structs to `src/elf/header.rs`.\n- Updated benchmarks to use new parser function.\n- Added new files: `src/elf/header.rs` and `src/parser.rs`.\n- Renamed and moved files from `src/elf` to `src/parser`.\n- Fixed tests to accommodate changes in parser functions.",
+          "timestamp": "2025-03-16T18:56:40+09:00",
+          "tree_id": "4a76ab9c084796ecaec330631d6464a51429cea0",
+          "url": "https://github.com/skanehira/yui/commit/c16afd86f402cc955553de356a5c98372de886f0"
+        },
+        "date": 1742119036278,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.18,
+            "range": "± 3.13",
             "unit": "ns/iter"
           }
         ]
