@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742120582855,
+  "lastUpdate": 1742133257268,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -179,6 +179,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_elf_header",
             "value": 91.01,
             "range": "± 3.36",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "07468de1cf821104591f2fcc4c01424a9970a37c",
+          "message": "Merge pull request #1 from skanehira/impl-section-parse\n\nimpl section parse",
+          "timestamp": "2025-03-16T22:53:41+09:00",
+          "tree_id": "0ec195c73f1c23bb05c848103b880150fff7055e",
+          "url": "https://github.com/skanehira/yui/commit/07468de1cf821104591f2fcc4c01424a9970a37c"
+        },
+        "date": 1742133257012,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 98.8,
+            "range": "± 9.68",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 871.9,
+            "range": "± 18.53",
             "unit": "ns/iter"
           }
         ]
