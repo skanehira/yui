@@ -1,3 +1,4 @@
+use super::ParseResult;
 use crate::bail_nom_error;
 use crate::elf::header::{Class, Data, Header, Ident, IdentVersion, Machine, OSABI, Type, Version};
 use crate::parser::error::ParseError;
@@ -11,8 +12,6 @@ use nom::{
 
 const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46]; // 0x7f 'E' 'L' 'F'
 const ELF_IDENT_HEADER_SIZE: usize = 16;
-
-type ParseResult<'a, T> = IResult<&'a [u8], T, ParseError>;
 
 impl TryFrom<u8> for Class {
     type Error = ParseError;
@@ -186,16 +185,16 @@ pub fn parse(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
     let (rest, r#type) = parse_type(rest)?;
     let (rest, machine) = parse_machine(rest)?;
     let (rest, version) = parse_version(rest)?;
-    let (rest, entry_address) = le_u64(rest)?;
-    let (rest, program_header_offset) = le_u64(rest)?;
-    let (rest, section_header_offset) = le_u64(rest)?;
+    let (rest, entry) = le_u64(rest)?;
+    let (rest, phoff) = le_u64(rest)?;
+    let (rest, shoff) = le_u64(rest)?;
     let (rest, flags) = le_u32(rest)?;
-    let (rest, header_size) = le_u16(rest)?;
-    let (rest, program_header_size) = le_u16(rest)?;
-    let (rest, program_header_num) = le_u16(rest)?;
-    let (rest, section_header_size) = le_u16(rest)?;
-    let (rest, section_header_num) = le_u16(rest)?;
-    let (rest, section_header_string_table_idx) = le_u16(rest)?;
+    let (rest, ehsize) = le_u16(rest)?;
+    let (rest, phentsize) = le_u16(rest)?;
+    let (rest, phnum) = le_u16(rest)?;
+    let (rest, shentsize) = le_u16(rest)?;
+    let (rest, shnum) = le_u16(rest)?;
+    let (rest, shstrndx) = le_u16(rest)?;
 
     Ok((
         rest,
@@ -204,16 +203,16 @@ pub fn parse(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
             r#type,
             machine,
             version,
-            entry: entry_address,
-            phoff: program_header_offset,
-            shoff: section_header_offset,
+            entry,
+            phoff,
+            shoff,
             flags,
-            ehsize: header_size,
-            phentsize: program_header_size,
-            phnum: program_header_num,
-            shentsize: section_header_size,
-            shnum: section_header_num,
-            shstrndx: section_header_string_table_idx,
+            ehsize,
+            phentsize,
+            phnum,
+            shentsize,
+            shnum,
+            shstrndx,
         },
     ))
 }
