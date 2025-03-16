@@ -1,11 +1,9 @@
-use nom::error::{FromExternalError, ParseError};
-
 trait ElfParseError {
-    fn as_elf_parser_error(&self) -> ElfError;
+    fn as_parse_error(&self) -> ParseError;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ElfError {
+pub enum ParseError {
     InvalidClass(u8),
     InvalidData(u8),
     InvalidIdentVersion(u8),
@@ -18,13 +16,13 @@ pub enum ElfError {
     Nom(String),
 }
 
-impl ElfParseError for ElfError {
-    fn as_elf_parser_error(&self) -> ElfError {
+impl ElfParseError for ParseError {
+    fn as_parse_error(&self) -> ParseError {
         self.clone()
     }
 }
 
-impl std::fmt::Display for ElfError {
+impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             Self::InvalidClass(b) => write!(f, "invalid ELF class: {}", b),
@@ -41,11 +39,11 @@ impl std::fmt::Display for ElfError {
     }
 }
 
-impl std::error::Error for ElfError {}
+impl std::error::Error for ParseError {}
 
-impl<I: std::fmt::Debug> ParseError<I> for ElfError {
+impl<I: std::fmt::Debug> nom::error::ParseError<I> for ParseError {
     fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        ElfError::Nom(format!("input: {:?}, kind: {:?}", input, kind))
+        ParseError::Nom(format!("input: {:?}, kind: {:?}", input, kind))
     }
 
     fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
@@ -54,8 +52,8 @@ impl<I: std::fmt::Debug> ParseError<I> for ElfError {
 }
 
 // workaround
-impl<I, E: ElfParseError> FromExternalError<I, E> for ElfError {
+impl<I, E: ElfParseError> nom::error::FromExternalError<I, E> for ParseError {
     fn from_external_error(_input: I, _kind: nom::error::ErrorKind, e: E) -> Self {
-        e.as_elf_parser_error()
+        e.as_parse_error()
     }
 }

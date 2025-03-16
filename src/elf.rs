@@ -1,10 +1,10 @@
-use error::ElfError;
+use error::ParseError;
 
 pub mod error;
 pub mod parser;
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfClass {
+pub enum Class {
     #[default]
     None = 0,
     Bit32 = 1,
@@ -12,21 +12,21 @@ pub enum ElfClass {
     Num = 3,
 }
 
-impl TryFrom<u8> for ElfClass {
-    type Error = ElfError;
+impl TryFrom<u8> for Class {
+    type Error = ParseError;
     fn try_from(b: u8) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
             1 => Ok(Self::Bit32),
             2 => Ok(Self::Bit64),
             3 => Ok(Self::Num),
-            _ => Err(ElfError::InvalidClass(b)),
+            _ => Err(ParseError::InvalidClass(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfData {
+pub enum Data {
     #[default]
     None = 0, // unknown
     Lsb = 1, // little-endian.
@@ -34,40 +34,40 @@ pub enum ElfData {
     Num = 3,
 }
 
-impl TryFrom<u8> for ElfData {
-    type Error = ElfError;
+impl TryFrom<u8> for Data {
+    type Error = ParseError;
     fn try_from(b: u8) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
             1 => Ok(Self::Lsb),
             2 => Ok(Self::Msb),
-            _ => Err(ElfError::InvalidData(b)),
+            _ => Err(ParseError::InvalidData(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfIdentVersion {
+pub enum IdentVersion {
     #[default]
     None = 0,
     Current = 1,
     Num = 2,
 }
 
-impl TryFrom<u8> for ElfIdentVersion {
-    type Error = ElfError;
+impl TryFrom<u8> for IdentVersion {
+    type Error = ParseError;
     fn try_from(b: u8) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
             1 => Ok(Self::Current),
             2 => Ok(Self::Num),
-            _ => Err(ElfError::InvalidIdentVersion(b)),
+            _ => Err(ParseError::InvalidIdentVersion(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfOSABI {
+pub enum OSABI {
     #[default]
     SystemV = 0, // or none
     HpUx = 1,
@@ -85,8 +85,8 @@ pub enum ElfOSABI {
     Standalone = 255,
 }
 
-impl TryFrom<u8> for ElfOSABI {
-    type Error = ElfError;
+impl TryFrom<u8> for OSABI {
+    type Error = ParseError;
     fn try_from(b: u8) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::SystemV),
@@ -103,22 +103,22 @@ impl TryFrom<u8> for ElfOSABI {
             64 => Ok(Self::ArmAeabi),
             97 => Ok(Self::Arm),
             255 => Ok(Self::Standalone),
-            _ => Err(ElfError::InvalidOSABI(b)),
+            _ => Err(ParseError::InvalidOSABI(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub struct ElfIdent {
-    pub class: ElfClass,
-    pub data: ElfData,
-    pub version: ElfIdentVersion,
-    pub os_abi: ElfOSABI,
+pub struct Ident {
+    pub class: Class,
+    pub data: Data,
+    pub version: IdentVersion,
+    pub os_abi: OSABI,
     pub abi_version: u8,
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfType {
+pub enum Type {
     #[default]
     None = 0, // No file type
     Rel = 1,         // Relocatable file
@@ -132,8 +132,8 @@ pub enum ElfType {
     Hiproc = 0xffff, // Processor-specific range end
 }
 
-impl TryFrom<u16> for ElfType {
-    type Error = ElfError;
+impl TryFrom<u16> for Type {
+    type Error = ParseError;
     fn try_from(b: u16) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
@@ -146,13 +146,13 @@ impl TryFrom<u16> for ElfType {
             0xfeff => Ok(Self::Hios),
             0xff00 => Ok(Self::Loproc),
             0xffff => Ok(Self::Hiproc),
-            _ => Err(ElfError::InvalidType(b)),
+            _ => Err(ParseError::InvalidType(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfMachine {
+pub enum Machine {
     #[default]
     None = 0,
     X86_64 = 62,
@@ -162,8 +162,8 @@ pub enum ElfMachine {
     Num = 253,
 }
 
-impl TryFrom<u16> for ElfMachine {
-    type Error = ElfError;
+impl TryFrom<u16> for Machine {
+    type Error = ParseError;
     fn try_from(b: u16) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
@@ -171,37 +171,37 @@ impl TryFrom<u16> for ElfMachine {
             183 => Ok(Self::AArch64),
             243 => Ok(Self::RiscV),
             253 => Ok(Self::Num),
-            _ => Err(ElfError::InvalidMachine(b)),
+            _ => Err(ParseError::InvalidMachine(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub enum ElfVersion {
+pub enum Version {
     #[default]
     None = 0,
     Current = 1,
     Num = 2,
 }
 
-impl TryFrom<u32> for ElfVersion {
-    type Error = ElfError;
+impl TryFrom<u32> for Version {
+    type Error = ParseError;
     fn try_from(b: u32) -> Result<Self, Self::Error> {
         match b {
             0 => Ok(Self::None),
             1 => Ok(Self::Current),
             2 => Ok(Self::Num),
-            _ => Err(ElfError::InvalidVersion(b)),
+            _ => Err(ParseError::InvalidVersion(b)),
         }
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub struct ElfHeader {
-    pub ident: ElfIdent,
-    pub r#type: ElfType,
-    pub machine: ElfMachine,
-    pub version: ElfVersion,
+pub struct Header {
+    pub ident: Ident,
+    pub r#type: Type,
+    pub machine: Machine,
+    pub version: Version,
     pub entry_address: u64,
     pub program_header_offset: u64,
     pub section_header_offset: u64,
@@ -219,6 +219,6 @@ pub struct ElfSection {
 }
 
 pub struct Elf {
-    pub ident: ElfIdent,
+    pub header: Header,
     pub sections: Vec<ElfSection>,
 }
