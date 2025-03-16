@@ -1,3 +1,6 @@
+pub mod elf;
+mod macros;
+
 #[cfg(test)]
 mod tests {
     #[test]

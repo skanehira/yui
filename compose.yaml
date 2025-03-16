@@ -1,0 +1,14 @@
+services:
+  yui-develop:
+    image: rust:slim-bullseye
+    container_name: yui-develop
+    volumes:
+      - .:/work
+      - cargo-cache:/root/.cargo
+    working_dir: /work
+    tty: true
+    entrypoint: /bin/bash
+
+volumes:
+  cargo-cache:
+    name: yui-develop-cargo-cache
