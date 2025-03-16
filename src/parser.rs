@@ -1,6 +1,6 @@
 pub mod error;
 pub mod header;
-pub mod section_header;
+pub mod section;
 
 use crate::elf::Elf;
 use crate::parser::error::ParseError;
