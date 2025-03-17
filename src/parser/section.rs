@@ -1,5 +1,5 @@
 use crate::{
-    elf::section::{Header, HeaderTable, SectionFlag, SectionType},
+    elf::section::{Header, SectionFlag, SectionType},
     parser::error::ParseError,
 };
 use nom::{
@@ -117,7 +117,7 @@ pub fn parse_header_table(
     shoff: usize,
     shstrndx: usize,
     shnum: usize,
-) -> ParseResult<HeaderTable> {
+) -> ParseResult<Vec<Header>> {
     count(parse_header, shnum)
         .parse(&raw[shoff..])
         .and_then(|(rest, mut headers)| {

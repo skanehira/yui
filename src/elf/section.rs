@@ -53,5 +53,3 @@ pub struct Header {
     pub addralign: u64,          // Section alignment
     pub entsize: u64,            // Entry size if section holds table
 }
-
-pub type HeaderTable = Vec<Header>;
