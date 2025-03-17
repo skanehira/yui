@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742133257268,
+  "lastUpdate": 1742220604732,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -215,6 +215,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 871.9,
             "range": "± 18.53",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "fffce61f6571d2a664bdb6365d2d86fb4201fd87",
+          "message": "fix: remove unused module and update variable value",
+          "timestamp": "2025-03-17T23:09:16+09:00",
+          "tree_id": "a5f6a14d10dfd0b24cebefde88657dec8113b321",
+          "url": "https://github.com/skanehira/yui/commit/fffce61f6571d2a664bdb6365d2d86fb4201fd87"
+        },
+        "date": 1742220604459,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.9,
+            "range": "± 2.01",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 849.37,
+            "range": "± 211.12",
             "unit": "ns/iter"
           }
         ]
