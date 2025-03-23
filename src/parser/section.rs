@@ -9,7 +9,7 @@ use nom::{
     number::complete::{le_u32, le_u64},
 };
 
-use super::ParseResult;
+use super::{ParseResult, helper};
 
 impl TryFrom<u32> for SectionType {
     type Error = ParseError;
@@ -73,60 +73,51 @@ fn parse_flags(raw: &[u8]) -> ParseResult<Vec<SectionFlag>> {
     .parse(raw)
 }
 
-pub fn parse_section_name(raw: &[u8], offset: usize) -> ParseResult<String> {
-    let mut end = offset;
-    while raw[end] != 0 {
-        end += 1;
-    }
-
-    let name = String::from_utf8_lossy(&raw[offset..end]).to_string();
-    Ok((&[], name))
-}
-
-pub fn parse_header(raw: &[u8]) -> ParseResult<Header> {
-    let (rest, name_idx) = le_u32(raw)?;
-    let (rest, r#type) = parse_type(rest)?;
-    let (rest, flags) = parse_flags(rest)?;
-    let (rest, addr) = le_u64(rest)?;
-    let (rest, offset) = le_u64(rest)?;
-    let (rest, size) = le_u64(rest)?;
-    let (rest, link) = le_u32(rest)?;
-    let (rest, info) = le_u32(rest)?;
-    let (rest, addralign) = le_u64(rest)?;
-    let (rest, entsize) = le_u64(rest)?;
-
-    let header = Header {
-        name_idx,
-        name: "".into(),
-        r#type,
-        flags,
-        addr,
-        offset,
-        size,
-        link,
-        info,
-        addralign,
-        entsize,
-    };
-
-    Ok((rest, header))
-}
-
-pub fn parse_header_table(
+pub fn parse_header(
     raw: &[u8],
     shoff: usize,
     shstrndx: usize,
     shnum: usize,
 ) -> ParseResult<Vec<Header>> {
-    count(parse_header, shnum)
-        .parse(&raw[shoff..])
-        .and_then(|(rest, mut headers)| {
-            let name_table = &raw[headers[shstrndx].offset as usize..];
-            for header in headers.iter_mut() {
-                header.name = parse_section_name(name_table, header.name_idx as usize)?.1;
-            }
-            Ok((rest, headers))
-        })
+    count(
+        |raw| {
+            let (rest, name_idx) = le_u32(raw)?;
+            let (rest, r#type) = parse_type(rest)?;
+            let (rest, flags) = parse_flags(rest)?;
+            let (rest, addr) = le_u64(rest)?;
+            let (rest, offset) = le_u64(rest)?;
+            let (rest, size) = le_u64(rest)?;
+            let (rest, link) = le_u32(rest)?;
+            let (rest, info) = le_u32(rest)?;
+            let (rest, addralign) = le_u64(rest)?;
+            let (rest, entsize) = le_u64(rest)?;
+
+            let header = Header {
+                name_idx,
+                name: "".into(),
+                r#type,
+                flags,
+                addr,
+                offset,
+                size,
+                link,
+                info,
+                addralign,
+                entsize,
+            };
+
+            Ok((rest, header))
+        },
+        shnum,
+    )
+    .parse(&raw[shoff..])
+    .and_then(|(rest, mut headers)| {
+        let string_table = &raw[headers[shstrndx].offset as usize..];
+        for header in headers.iter_mut() {
+            header.name = helper::get_string_by_offset(string_table, header.name_idx as usize)?.1;
+        }
+        Ok((rest, headers))
+    })
 }
 
 #[cfg(test)]
@@ -135,22 +126,15 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn should_parse_section_name() {
-        let bytes = b".text\0";
-        let (_, name) = parse_section_name(bytes, 0).unwrap();
-        assert_eq!(name, ".text");
-    }
-
-    #[test]
     fn should_parse_section_header_table() {
         let raw = include_bytes!("./fixtures/sub.o");
-        let (_, ident) = crate::parser::header::parse(raw).unwrap();
+        let (_, header) = crate::parser::header::parse(raw).unwrap();
 
-        let (_, header_table) = parse_header_table(
+        let (_, header_table) = parse_header(
             raw,
-            ident.shoff as usize,
-            ident.shstrndx as usize,
-            ident.shnum as usize,
+            header.shoff as usize,
+            header.shstrndx as usize,
+            header.shnum as usize,
         )
         .unwrap();
 

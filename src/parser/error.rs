@@ -17,6 +17,10 @@ pub enum ParseError {
     // Section Header
     InvalidSectionType(u32),
     InvalidSectionFlags(u64),
+    // Symbol Table
+    InvalidVisibility(u8),
+    InvalidSymbolType(u8),
+    InvalidSymbolBinding(u8),
     Nom(String),
 }
 
