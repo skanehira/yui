@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742220604732,
+  "lastUpdate": 1742733619328,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -251,6 +251,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 849.37,
             "range": "± 211.12",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "9246b6c699f7fcba36d75249b6149e52e700f38d",
+          "message": "chore: add Makefile for build test fixitures",
+          "timestamp": "2025-03-23T21:39:36+09:00",
+          "tree_id": "93016853b019781da9cd255d7adc818121c00357",
+          "url": "https://github.com/skanehira/yui/commit/9246b6c699f7fcba36d75249b6149e52e700f38d"
+        },
+        "date": 1742733618493,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 92.2,
+            "range": "± 34.09",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 854.11,
+            "range": "± 357.76",
             "unit": "ns/iter"
           }
         ]
