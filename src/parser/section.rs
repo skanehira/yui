@@ -60,7 +60,7 @@ fn parse_flags(raw: &[u8]) -> ParseResult<Vec<SectionFlag>> {
         ];
 
         if mask == 0 {
-            return Ok(vec![SectionFlag::Undefined]);
+            return Ok(vec![]);
         }
 
         let flags = flag_variants
@@ -143,7 +143,7 @@ mod tests {
                 name_idx: 0,
                 name: "".into(),
                 r#type: SectionType::Null,
-                flags: vec![SectionFlag::Undefined],
+                flags: vec![],
                 addr: 0,
                 offset: 0,
                 size: 0,
@@ -208,7 +208,7 @@ mod tests {
                 name_idx: 53,
                 name: ".note.GNU-stack".into(),
                 r#type: SectionType::ProgBits,
-                flags: vec![SectionFlag::Undefined],
+                flags: vec![],
                 addr: 0,
                 offset: 108,
                 size: 0,
@@ -221,7 +221,7 @@ mod tests {
                 name_idx: 1,
                 name: ".symtab".into(),
                 r#type: SectionType::SymTab,
-                flags: vec![SectionFlag::Undefined],
+                flags: vec![],
                 addr: 0,
                 offset: 112,
                 size: 216,
@@ -234,7 +234,7 @@ mod tests {
                 name_idx: 9,
                 name: ".strtab".into(),
                 r#type: SectionType::StrTab,
-                flags: vec![SectionFlag::Undefined],
+                flags: vec![],
                 addr: 0,
                 offset: 328,
                 size: 12,
@@ -247,7 +247,7 @@ mod tests {
                 name_idx: 17,
                 name: ".shstrtab".into(),
                 r#type: SectionType::StrTab,
-                flags: vec![SectionFlag::Undefined],
+                flags: vec![],
                 addr: 0,
                 offset: 340,
                 size: 69,
