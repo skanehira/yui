@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742739739778,
+  "lastUpdate": 1742827521878,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -323,6 +323,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 787.96,
             "range": "± 431.79",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "43d12f1eae5a376f4a025527edc13eb12b788f96",
+          "message": "Add relocation parsing to ELF parser\n\n- Introduced `relocation` module in `src/elf.rs` and `src/parser.rs`.\n- Added `RelocationType`, `Info`, and `RelocationAddend` structs in `src/elf/relocation.rs`.\n- Implemented parsing logic for relocation addends in `src/parser/relocation.rs`.\n- Updated `Elf` struct to include optional relocation data.\n- Enhanced error handling with `InvalidRelocationType` in `src/parser/error.rs`.\n- Added tests for relocation parsing functionality.",
+          "timestamp": "2025-03-24T23:44:42+09:00",
+          "tree_id": "92014627494b0dd92011633dcc22a1d873524e3a",
+          "url": "https://github.com/skanehira/yui/commit/43d12f1eae5a376f4a025527edc13eb12b788f96"
+        },
+        "date": 1742827521416,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 90.54,
+            "range": "± 4.10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 821.75,
+            "range": "± 14.37",
             "unit": "ns/iter"
           }
         ]
