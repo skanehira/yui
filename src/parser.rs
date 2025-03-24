@@ -2,6 +2,7 @@ mod helper;
 
 pub mod error;
 pub mod header;
+pub mod relocation;
 pub mod section;
 pub mod symbol;
 
@@ -27,12 +28,15 @@ pub fn parse_elf(raw: &[u8]) -> ParseResult<Elf> {
 
     let symbols = symbol::parse(raw, &section_headers).unwrap().1;
 
+    let relocation = relocation::parse(raw, &section_headers).unwrap().1;
+
     Ok((
         &[],
         Elf {
             header,
             section_headers,
             symbols,
+            relocation,
         },
     ))
 }

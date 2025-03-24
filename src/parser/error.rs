@@ -21,6 +21,8 @@ pub enum ParseError {
     InvalidVisibility(u8),
     InvalidSymbolType(u8),
     InvalidSymbolBinding(u8),
+    // Relocation Addend
+    InvalidRelocationType(u32),
     Nom(String),
 }
 
