@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742827521878,
+  "lastUpdate": 1742906596959,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -359,6 +359,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 821.75,
             "range": "± 14.37",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "79871e95a3d8f3b02573d5ff57601a3ab9a43194",
+          "message": "Refactor ELF parsing: Change `relocation` to `relocations` for consistency\n\n- Updated `Elf` struct to use `Vec<relocation::RelocationAddend>` instead of `Option<Vec<relocation::RelocationAddend>>`.\n- Modified `parse_elf` function to handle the updated `relocations` field.\n- Adjusted `parse` function in `relocation.rs` to return an empty vector instead of `None` when no relocations are found.\n- Updated tests to reflect changes in the `relocations` handling.",
+          "timestamp": "2025-03-25T21:42:36+09:00",
+          "tree_id": "660726a8e072c2ade300e72841fae09b24947647",
+          "url": "https://github.com/skanehira/yui/commit/79871e95a3d8f3b02573d5ff57601a3ab9a43194"
+        },
+        "date": 1742906596525,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 90.96,
+            "range": "± 1.85",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 811.61,
+            "range": "± 102.25",
             "unit": "ns/iter"
           }
         ]
