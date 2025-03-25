@@ -14,21 +14,18 @@ pub type ParseResult<'a, T> = IResult<&'a [u8], T, ParseError>;
 
 pub fn parse_elf(raw: &[u8]) -> ParseResult<Elf> {
     let header = header::parse(raw)?.1;
-    let section_headers = if header.shnum == 0 {
-        vec![]
-    } else {
-        section::parse_header(
-            raw,
-            header.shoff as usize,
-            header.shstrndx as usize,
-            header.shnum as usize,
-        )?
-        .1
-    };
 
-    let symbols = symbol::parse(raw, &section_headers).unwrap().1;
+    let section_headers = section::parse_header(
+        raw,
+        header.shoff as usize,
+        header.shstrndx as usize,
+        header.shnum as usize,
+    )?
+    .1;
 
-    let relocation = relocation::parse(raw, &section_headers).unwrap().1;
+    let symbols = symbol::parse(raw, &section_headers)?.1;
+
+    let relocations = relocation::parse(raw, &section_headers)?.1;
 
     Ok((
         &[],
@@ -36,7 +33,7 @@ pub fn parse_elf(raw: &[u8]) -> ParseResult<Elf> {
             header,
             section_headers,
             symbols,
-            relocations: relocation,
+            relocations,
         },
     ))
 }

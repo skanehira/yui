@@ -79,6 +79,10 @@ pub fn parse_header(
     shstrndx: usize,
     shnum: usize,
 ) -> ParseResult<Vec<Header>> {
+    if shnum == 0 {
+        return Ok((raw, vec![]));
+    }
+
     count(
         |raw| {
             let (rest, name_idx) = le_u32(raw)?;
