@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742906596959,
+  "lastUpdate": 1742943313235,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -395,6 +395,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 811.61,
             "range": "± 102.25",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "e3b53fd61f85f1958926074b51b0d000616af193",
+          "message": "Fix ELF parsing logic and handle empty section headers\n\n- Removed unnecessary check for zero section headers in `parse_elf` function.\n- Simplified section header parsing by directly calling `section::parse_header`.\n- Corrected variable name from `relocation` to `relocations`.\n- Added handling for zero section headers in `parse_header` function in `section.rs`.",
+          "timestamp": "2025-03-26T07:54:30+09:00",
+          "tree_id": "a615f7f5ee6cccb4785a31f07bca04cf19d8fd78",
+          "url": "https://github.com/skanehira/yui/commit/e3b53fd61f85f1958926074b51b0d000616af193"
+        },
+        "date": 1742943312363,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.28,
+            "range": "± 3.29",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 800.85,
+            "range": "± 15.08",
             "unit": "ns/iter"
           }
         ]
