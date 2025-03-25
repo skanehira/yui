@@ -36,7 +36,7 @@ pub fn parse_elf(raw: &[u8]) -> ParseResult<Elf> {
             header,
             section_headers,
             symbols,
-            relocation,
+            relocations: relocation,
         },
     ))
 }

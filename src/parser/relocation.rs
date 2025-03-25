@@ -44,12 +44,12 @@ fn parse_info(raw: &[u8]) -> ParseResult<Info> {
 pub fn parse<'a>(
     raw: &'a [u8],
     section_headers: &'a [section::Header],
-) -> ParseResult<'a, Option<Vec<RelocationAddend>>> {
+) -> ParseResult<'a, Vec<RelocationAddend>> {
     let Some(header) = section_headers
         .iter()
         .find(|&s| s.r#type == section::SectionType::Rela)
     else {
-        return Ok((raw, None));
+        return Ok((raw, vec![]));
     };
 
     let start = header.offset as usize;
@@ -74,7 +74,7 @@ pub fn parse<'a>(
     )
     .parse(&raw[start..end])?;
 
-    Ok((rest, Some(relocations)))
+    Ok((rest, relocations))
 }
 
 #[cfg(test)]
@@ -112,14 +112,14 @@ mod tests {
         let reloc = parse(raw, &section_headers).unwrap().1;
         assert_eq!(
             reloc,
-            Some(vec![RelocationAddend {
+            vec![RelocationAddend {
                 offset: 0,
                 info: Info {
                     r#type: RelocationType::Aarch64AdrPrelLo21,
                     symbol_index: 9,
                 },
                 addend: 0,
-            }])
+            }]
         );
     }
 }
