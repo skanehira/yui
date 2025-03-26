@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742943313235,
+  "lastUpdate": 1742973294440,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -431,6 +431,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 800.85,
             "range": "± 15.08",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "a61cf3be08a78c97ca7bede4ee35dee8b4ff7217",
+          "message": "Add support for parsing section header table data in ELF files\n\n- Updated `Elf` and `Header` structs to include section data.\n- Modified `parse_header` function to extract and store section data.\n- Integrated `insta` for snapshot testing.\n- Replaced manual assertions with snapshot testing in `should_parse_section_header_table` test.",
+          "timestamp": "2025-03-26T16:14:10+09:00",
+          "tree_id": "e20018e4216fc93227ee33044b3afe37328f45c5",
+          "url": "https://github.com/skanehira/yui/commit/a61cf3be08a78c97ca7bede4ee35dee8b4ff7217"
+        },
+        "date": 1742973294044,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.7,
+            "range": "± 2.02",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 889,
+            "range": "± 20.12",
             "unit": "ns/iter"
           }
         ]
