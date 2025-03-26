@@ -25,7 +25,7 @@ pub fn parse_elf(raw: &[u8]) -> ParseResult<Elf> {
 
     let symbols = symbol::parse(raw, &section_headers)?.1;
 
-    let relocations = relocation::parse(raw, &section_headers)?.1;
+    let relocations = relocation::parse(&section_headers)?.1;
 
     Ok((
         &[],

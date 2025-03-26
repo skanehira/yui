@@ -84,8 +84,8 @@ pub fn parse_header(
     }
 
     count(
-        |raw| {
-            let (rest, name_idx) = le_u32(raw)?;
+        |rest| {
+            let (rest, name_idx) = le_u32(rest)?;
             let (rest, r#type) = parse_type(rest)?;
             let (rest, flags) = parse_flags(rest)?;
             let (rest, addr) = le_u64(rest)?;
@@ -95,6 +95,7 @@ pub fn parse_header(
             let (rest, info) = le_u32(rest)?;
             let (rest, addralign) = le_u64(rest)?;
             let (rest, entsize) = le_u64(rest)?;
+            let data = &raw[offset as usize..(offset + size) as usize];
 
             let header = Header {
                 name_idx,
@@ -108,6 +109,7 @@ pub fn parse_header(
                 info,
                 addralign,
                 entsize,
+                data,
             };
 
             Ok((rest, header))
@@ -127,7 +129,6 @@ pub fn parse_header(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn should_parse_section_header_table() {
@@ -142,125 +143,6 @@ mod tests {
         )
         .unwrap();
 
-        let want = vec![
-            Header {
-                name_idx: 0,
-                name: "".into(),
-                r#type: SectionType::Null,
-                flags: vec![],
-                addr: 0,
-                offset: 0,
-                size: 0,
-                link: 0,
-                info: 0,
-                addralign: 0,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 27,
-                name: ".text".into(),
-                r#type: SectionType::ProgBits,
-                flags: vec![SectionFlag::Alloc, SectionFlag::ExecInstr],
-                addr: 0,
-                offset: 64,
-                size: 0,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 33,
-                name: ".data".into(),
-                r#type: SectionType::ProgBits,
-                flags: vec![SectionFlag::Write, SectionFlag::Alloc],
-                addr: 0,
-                offset: 64,
-                size: 4,
-                link: 0,
-                info: 0,
-                addralign: 4,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 39,
-                name: ".bss".into(),
-                r#type: SectionType::NoBits,
-                flags: vec![SectionFlag::Write, SectionFlag::Alloc],
-                addr: 0,
-                offset: 68,
-                size: 0,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 44,
-                name: ".comment".into(),
-                r#type: SectionType::ProgBits,
-                flags: vec![SectionFlag::Merge, SectionFlag::Strings],
-                addr: 0,
-                offset: 68,
-                size: 40,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 1,
-            },
-            Header {
-                name_idx: 53,
-                name: ".note.GNU-stack".into(),
-                r#type: SectionType::ProgBits,
-                flags: vec![],
-                addr: 0,
-                offset: 108,
-                size: 0,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 1,
-                name: ".symtab".into(),
-                r#type: SectionType::SymTab,
-                flags: vec![],
-                addr: 0,
-                offset: 112,
-                size: 216,
-                link: 7,
-                info: 8,
-                addralign: 8,
-                entsize: 24,
-            },
-            Header {
-                name_idx: 9,
-                name: ".strtab".into(),
-                r#type: SectionType::StrTab,
-                flags: vec![],
-                addr: 0,
-                offset: 328,
-                size: 12,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 0,
-            },
-            Header {
-                name_idx: 17,
-                name: ".shstrtab".into(),
-                r#type: SectionType::StrTab,
-                flags: vec![],
-                addr: 0,
-                offset: 340,
-                size: 69,
-                link: 0,
-                info: 0,
-                addralign: 1,
-                entsize: 0,
-            },
-        ];
-        assert_eq!(header_table, want);
+        insta::assert_debug_snapshot!(header_table);
     }
 }

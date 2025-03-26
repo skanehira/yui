@@ -41,19 +41,14 @@ fn parse_info(raw: &[u8]) -> ParseResult<Info> {
     map_res(le_u64, Info::try_from).parse(raw)
 }
 
-pub fn parse<'a>(
-    raw: &'a [u8],
-    section_headers: &'a [section::Header],
-) -> ParseResult<'a, Vec<RelocationAddend>> {
+pub fn parse<'a>(section_headers: &'a [section::Header]) -> ParseResult<'a, Vec<RelocationAddend>> {
     let Some(header) = section_headers
         .iter()
         .find(|&s| s.r#type == section::SectionType::Rela)
     else {
-        return Ok((raw, vec![]));
+        return Ok((&[], vec![]));
     };
 
-    let start = header.offset as usize;
-    let end = (header.offset + header.size) as usize;
     let entry_count = (header.size / header.entsize) as usize;
 
     let (rest, relocations) = count(
@@ -72,7 +67,7 @@ pub fn parse<'a>(
         },
         entry_count,
     )
-    .parse(&raw[start..end])?;
+    .parse(header.data)?;
 
     Ok((rest, relocations))
 }
@@ -109,7 +104,7 @@ mod tests {
         )
         .unwrap();
 
-        let reloc = parse(raw, &section_headers).unwrap().1;
+        let reloc = parse(&section_headers).unwrap().1;
         assert_eq!(
             reloc,
             vec![RelocationAddend {

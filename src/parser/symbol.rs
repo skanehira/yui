@@ -78,13 +78,10 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
         return Ok((&[], vec![]));
     };
 
-    // will be .strtab
+    // get .strtab
     let string_table = &raw[section_headers[symbol_header.link as usize].offset as usize..];
 
     let entry_count = (symbol_header.size / symbol_header.entsize) as usize;
-
-    let start = symbol_header.offset as usize;
-    let end = (symbol_header.offset + symbol_header.size) as usize;
 
     let (rest, symbols) = count(
         |raw| {
@@ -109,7 +106,7 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
         },
         entry_count,
     )
-    .parse(&raw[start..end])?;
+    .parse(symbol_header.data)?;
 
     Ok((rest, symbols))
 }

@@ -40,7 +40,7 @@ pub enum SectionFlag {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Header {
+pub struct Header<'a> {
     pub name_idx: u32,           // Section name (string tbl index)
     pub name: String,            // Section name
     pub r#type: SectionType,     // Section type
@@ -52,4 +52,5 @@ pub struct Header {
     pub info: u32,               // Additional section information
     pub addralign: u64,          // Section alignment
     pub entsize: u64,            // Entry size if section holds table
+    pub data: &'a [u8],
 }
