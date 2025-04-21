@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SectionType {
     Null = 0,                   // Section header table entry unused
     ProgBits = 1,               // Program data

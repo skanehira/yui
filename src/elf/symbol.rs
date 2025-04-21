@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Type {
     NoType = 0,  // Symbol type is unspecified
     Object = 1,  // Symbol is a data object
@@ -14,7 +14,7 @@ pub enum Type {
     Hiproc = 15, // End of processor-specific
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Binding {
     Local = 0,   // Local symbol
     Global = 1,  // Global symbol
