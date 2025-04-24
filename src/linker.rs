@@ -9,6 +9,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
+use crate::elf::ELF;
 use crate::elf::{header, program_header, relocation, section, segument, symbol};
 use crate::parser;
 
@@ -49,16 +50,9 @@ impl ResolvedSymbol {
     }
 }
 
-#[derive(Debug)]
-struct Object {
-    section_headers: Vec<section::Header>,
-    symbols: Vec<symbol::Symbol>,
-    relocations: Vec<relocation::RelocationAddend>,
-}
-
 #[derive(Debug, Default)]
 pub struct Linker {
-    objects: Vec<Object>,
+    objects: Vec<ELF>,
 }
 
 impl Linker {
@@ -73,11 +67,7 @@ impl Linker {
 
         let elf = parser::parse_elf(&data)?.1;
 
-        self.objects.push(Object {
-            section_headers: elf.section_headers,
-            symbols: elf.symbols,
-            relocations: elf.relocations,
-        });
+        self.objects.push(elf);
 
         Ok(self)
     }
@@ -90,11 +80,7 @@ impl Linker {
         for input_path in input_paths {
             let object = fs::read(input_path)?;
             let elf = parser::parse_elf(&object)?.1;
-            self.objects.push(Object {
-                section_headers: elf.section_headers,
-                symbols: elf.symbols,
-                relocations: elf.relocations,
-            });
+            self.objects.push(elf);
         }
         let output_sections = self.link()?;
         self.write_executable(output_path, &output_sections)

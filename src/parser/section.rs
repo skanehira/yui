@@ -73,6 +73,24 @@ fn parse_flags(raw: &[u8]) -> ParseResult<Vec<SectionFlag>> {
     .parse(raw)
 }
 
+/// Parses the section headers from the raw ELF file data.
+///
+/// # Arguments
+///
+/// * `raw` - A byte slice containing the raw ELF file data.
+/// * `shoff` - The offset in the file where the section header table begins.
+/// * `shstrndx` - The index of the section header string table in the section header table.
+/// * `shnum` - The number of section headers in the section header table.
+///
+/// # Returns
+///
+/// A `ParseResult` containing a vector of parsed `Header` structures or a `ParseError` if parsing fails.
+///
+/// # Notes
+///
+/// If `shnum` is 0, the function returns an empty vector of headers. The function uses a parser combinator
+/// to iterate through the section headers and extract their fields. After parsing, it resolves the section
+/// names using the section header string table.
 pub fn parse_header(
     raw: &[u8],
     shoff: usize,
