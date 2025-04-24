@@ -6,181 +6,97 @@ use std::io;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use crate::elf::{header, program_header, relocation, section, segument, symbol};
 use crate::parser;
 
-/// 出力セクション情報
 #[derive(Debug, Clone)]
 pub struct OutputSection {
-    /// セクション名
     pub name: String,
-    /// セクションタイプ
     pub r#type: section::SectionType,
-    /// セクション属性フラグ
     pub flags: Vec<section::SectionFlag>,
-    /// セクション仮想アドレス
     pub addr: u64,
-    /// ファイル内オフセット
     pub offset: u64,
-    /// セクションサイズ
     pub size: u64,
-    /// セクションデータ
     pub data: Vec<u8>,
-    /// アラインメント制約
     pub align: u64,
 }
 
-/// シンボル情報を保持する構造体
 #[derive(Debug, Clone)]
 pub struct ResolvedSymbol {
-    /// シンボル名
     pub name: String,
-    /// シンボルの最終的な値（アドレスなど）
     pub value: u64,
-    /// シンボルのサイズ
     pub size: u64,
-    /// シンボルの種類
     pub r#type: symbol::Type,
-    /// シンボルのバインディング（グローバル、ローカルなど）
     pub binding: symbol::Binding,
-    /// シンボルが所属するセクションのインデックス
     pub section_index: u16,
-    /// シンボルが定義されているオブジェクトファイルのインデックス
     pub object_index: usize,
-    /// シンボルが定義済みかどうか
     pub is_defined: bool,
 }
 
 impl ResolvedSymbol {
-    /// シンボルの強さを比較する（Local > Global > Weak）
     pub fn is_stronger_than(&self, other: &Self) -> bool {
         match (self.binding, other.binding) {
-            // Local が最も強い
             (symbol::Binding::Local, _) => true,
-            // Weak が最も弱い
             (_, symbol::Binding::Weak) => true,
-            // Global は Local より弱いが Weak より強い
-            (symbol::Binding::Global, symbol::Binding::Global) => false, // 同じ強さ
-            (symbol::Binding::Global, symbol::Binding::Local) => false,  // 自分が弱い
-            (symbol::Binding::Weak, _) => false,                         // 自分が弱い
-            _ => false,                                                  // その他のケース
+            (symbol::Binding::Global, symbol::Binding::Global) => false,
+            (symbol::Binding::Global, symbol::Binding::Local) => false,
+            (symbol::Binding::Weak, _) => false,
+            _ => false,
         }
-    }
-
-    /// 現在のシンボルが未定義で、引数のシンボルが定義済みかどうかチェック
-    pub fn is_undefined_and_other_defined(&self, other: &Self) -> bool {
-        !self.is_defined && other.is_defined
     }
 }
 
-/// オブジェクトファイル情報を管理する構造体
-/// ライフタイムの問題を回避するため、ELFの主要情報をコピーして保持する
 #[derive(Debug)]
-struct ObjectFile {
-    // オリジナルのElfからデータを抽出して所有する形に変更
-    #[allow(dead_code)]
-    header: header::Header,
-    #[allow(dead_code)]
-    section_headers: Vec<OwnedSectionHeader>,
+struct Object {
+    section_headers: Vec<section::Header>,
     symbols: Vec<symbol::Symbol>,
-    #[allow(dead_code)]
     relocations: Vec<relocation::RelocationAddend>,
-    #[allow(dead_code)]
-    raw_data: Vec<u8>, // 元のバイナリデータ
 }
 
-/// セクションヘッダーで所有権を持つバージョン
-#[derive(Debug)]
-#[allow(dead_code)]
-struct OwnedSectionHeader {
-    name: String,
-    r#type: section::SectionType,
-    flags: Vec<section::SectionFlag>,
-    addr: u64,
-    offset: u64,
-    size: u64,
-    link: u32,
-    info: u32,
-    addralign: u64,
-    entsize: u64,
-    data: Vec<u8>, // データをコピーして所有
-}
-
-impl From<section::Header<'_>> for OwnedSectionHeader {
-    fn from(header: section::Header<'_>) -> Self {
-        OwnedSectionHeader {
-            name: header.name,
-            r#type: header.r#type,
-            flags: header.flags,
-            addr: header.addr,
-            offset: header.offset,
-            size: header.size,
-            link: header.link,
-            info: header.info,
-            addralign: header.addralign,
-            entsize: header.entsize,
-            data: header.data.to_vec(), // データをコピー
-        }
-    }
-}
-
-/// リンカーの基本構造体
 #[derive(Debug, Default)]
 pub struct Linker {
-    objects: Vec<ObjectFile>,
+    objects: Vec<Object>,
 }
 
 impl Linker {
-    /// 新しいリンカーインスタンスを作成
     pub fn new() -> Self {
         Linker {
             objects: Vec::new(),
         }
     }
 
-    /// オブジェクトファイルをリンカーに追加
-    pub fn add_object(mut self, path: &Path) -> io::Result<Self> {
-        // ファイルの内容を読み込む
+    pub fn add_object(mut self, path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let data = fs::read(path)?;
 
-        // ELFとしてパース
-        let elf = match parser::parse_elf(&data) {
-            Ok((_, elf)) => elf,
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("ELFパースエラー: {:?}", e),
-                ));
-            }
-        };
+        let elf = parser::parse_elf(&data)?.1;
 
-        // ELFデータを所有権のある形式に変換
-        let owned_section_headers = elf
-            .section_headers
-            .into_iter()
-            .map(OwnedSectionHeader::from)
-            .collect();
-
-        // オブジェクトファイル情報を追加
-        self.objects.push(ObjectFile {
-            header: elf.header,
-            section_headers: owned_section_headers,
+        self.objects.push(Object {
+            section_headers: elf.section_headers,
             symbols: elf.symbols,
             relocations: elf.relocations,
-            raw_data: data,
         });
 
         Ok(self)
     }
 
-    /// リンク処理全体を実行し、実行可能ファイルを出力する
-    pub fn link_to_file(&self, output_path: &Path) -> Result<(), String> {
-        // リンク処理を実行
+    pub fn link_to_file(
+        &mut self,
+        output_path: &Path,
+        input_paths: &[&Path],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for input_path in input_paths {
+            let object = fs::read(input_path)?;
+            let elf = parser::parse_elf(&object)?.1;
+            self.objects.push(Object {
+                section_headers: elf.section_headers,
+                symbols: elf.symbols,
+                relocations: elf.relocations,
+            });
+        }
         let output_sections = self.link()?;
-
-        // 実行可能ファイルに書き出し
         self.write_executable(output_path, &output_sections)
     }
 
@@ -189,10 +105,13 @@ impl Linker {
         &self,
         output_path: &Path,
         output_sections: &[OutputSection],
-    ) -> Result<(), String> {
-        // ファイルを作成
-        let mut file = fs::File::create(output_path)
-            .map_err(|e| format!("出力ファイルの作成に失敗: {}", e))?;
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .mode(0o655) // rw-r-xr-x
+            .open(output_path)?;
 
         // まずシンボル解決を行い、_startシンボルのアドレスを取得
         let (mut resolved_symbols, _) = self.resolve_symbols();
@@ -200,27 +119,20 @@ impl Linker {
         // セクションレイアウトを行う（シンボルアドレスが更新される）
         self.layout_sections(&mut resolved_symbols);
 
-        // _startシンボルのアドレスをエントリポイントに設定
-        let mut entry_point = 0x400000; // 修正: テキストセクションの開始アドレス
-        if let Some(start_symbol) = resolved_symbols.get("_start") {
-            println!("_startシンボルのアドレスを設定: 0x{:x}", start_symbol.value);
-            entry_point = start_symbol.value;
-        } else {
-            println!(
-                "警告: _startシンボルが見つかりません。テキストセクションの開始アドレス(0x401000)を使用します。"
-            );
-        }
+        let Some(ResolvedSymbol {
+            value: entry_point, ..
+        }) = resolved_symbols.get("_start")
+        else {
+            return Err("sybmol _start not found".into());
+        };
 
         // シンボル文字列テーブル(.strtab)を作成
         let mut strtab_data: Vec<u8> = Vec::new();
         let mut symbol_name_offsets: HashMap<String, usize> = HashMap::new();
 
-        // 文字列テーブルの先頭はNULL文字
-        strtab_data.push(0);
-
         // シンボル名をテーブルに追加
         for name in resolved_symbols.keys() {
-            if !name.is_empty() && !symbol_name_offsets.contains_key(name) {
+            if !name.is_empty() {
                 let offset = strtab_data.len();
                 symbol_name_offsets.insert(name.clone(), offset);
                 strtab_data.extend_from_slice(name.as_bytes());
@@ -230,9 +142,6 @@ impl Linker {
 
         // シンボルテーブル(.symtab)を作成
         let mut symtab_data: Vec<u8> = Vec::new();
-
-        // NULL シンボルエントリ
-        self.write_symbol_entry(&mut symtab_data, 0, 0, 0, 0, 0, 0);
 
         // 各シンボルのエントリを追加
         for (name, symbol) in &resolved_symbols {
@@ -336,7 +245,7 @@ impl Linker {
 
         // ELFヘッダーを作成
         let mut elf_header = self.create_elf_header(output_sections);
-        elf_header.entry = entry_point;
+        elf_header.entry = *entry_point;
 
         // セクションヘッダーテーブルの位置を計算
         let sections_with_tables = [
@@ -372,49 +281,24 @@ impl Linker {
         let program_headers = self.create_program_headers(output_sections);
 
         // ELFヘッダーを書き込み
-        self.write_elf_header(&mut file, &elf_header)
-            .map_err(|e| format!("ELFヘッダーの書き込みに失敗: {}", e))?;
+        self.write_elf_header(&mut file, &elf_header)?;
 
         // プログラムヘッダーを書き込み
-        self.write_program_headers(&mut file, &program_headers)
-            .map_err(|e| format!("プログラムヘッダーの書き込みに失敗: {}", e))?;
+        self.write_program_headers(&mut file, &program_headers)?;
 
         // セクションデータを書き込み
-        self.write_sections(&mut file, &sections_with_tables)
-            .map_err(|e| format!("セクションの書き込みに失敗: {}", e))?;
+        self.write_sections(&mut file, &sections_with_tables)?;
 
         // セクションヘッダーテーブルを書き込み
-        file.seek(SeekFrom::Start(sh_offset))
-            .map_err(|e| format!("ファイルシークに失敗: {}", e))?;
+        file.seek(SeekFrom::Start(sh_offset))?;
 
         // NULLセクションヘッダー
-        self.write_section_header(&mut file, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)
-            .map_err(|e| format!("NULLセクションヘッダーの書き込みに失敗: {}", e))?;
+        self.write_section_header(&mut file, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
 
         // 各セクションのヘッダーを書き込み
         for section in sections_with_tables.iter() {
             let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
-            let sh_type = match section.r#type {
-                section::SectionType::Null => 0,
-                section::SectionType::ProgBits => 1,
-                section::SectionType::SymTab => 2,
-                section::SectionType::StrTab => 3,
-                section::SectionType::Rela => 4,
-                section::SectionType::Hash => 5,
-                section::SectionType::Dynamic => 6,
-                section::SectionType::Note => 7,
-                section::SectionType::NoBits => 8,
-                section::SectionType::Rel => 9,
-                section::SectionType::ShLib => 10,
-                section::SectionType::DynSym => 11,
-                section::SectionType::InitArray => 14,
-                section::SectionType::FiniArray => 15,
-                section::SectionType::PreInitArray => 16,
-                section::SectionType::Group => 17,
-                section::SectionType::SymTabShndx => 18,
-                _ => 0,
-            };
-
+            let sh_type = section.r#type as u32;
             let mut sh_flags: u64 = 0;
             for flag in &section.flags {
                 let bit = match flag {
@@ -460,13 +344,7 @@ impl Linker {
                 sh_info,            // 情報（追加情報）
                 section.align,      // アラインメント
                 sh_entsize,         // エントリサイズ
-            )
-            .map_err(|e| {
-                format!(
-                    "セクションヘッダーの書き込みに失敗: {} ({})",
-                    e, section.name
-                )
-            })?;
+            )?;
         }
 
         Ok(())
@@ -557,49 +435,16 @@ impl Linker {
         file.write_all(&[0x7f, b'E', b'L', b'F'])?;
 
         // ELFクラス（32/64ビット）
-        let class = match header.ident.class {
-            header::Class::None => 0,
-            header::Class::Bit32 => 1,
-            header::Class::Bit64 => 2,
-            header::Class::Num => 3,
-        };
-        file.write_all(&[class])?;
+        file.write_all(&[header.ident.class as u8])?;
 
         // エンディアン
-        let data = match header.ident.data {
-            header::Data::None => 0,
-            header::Data::Lsb => 1, // Little Endian
-            header::Data::Msb => 2, // Big Endian
-            header::Data::Num => 3,
-        };
-        file.write_all(&[data])?;
+        file.write_all(&[header.ident.data as u8])?;
 
         // バージョン
-        let version = match header.ident.version {
-            header::IdentVersion::None => 0,
-            header::IdentVersion::Current => 1,
-            header::IdentVersion::Num => 2,
-        };
-        file.write_all(&[version])?;
+        file.write_all(&[header.ident.version as u8])?;
 
         // OS ABI
-        let osabi = match header.ident.os_abi {
-            header::OSABI::SystemV => 0,
-            header::OSABI::HpUx => 1,
-            header::OSABI::NetBsd => 2,
-            header::OSABI::Gnu => 3,
-            header::OSABI::Solaris => 6,
-            header::OSABI::Aix => 7,
-            header::OSABI::Irix => 8,
-            header::OSABI::FreeBsd => 9,
-            header::OSABI::Tru64 => 10,
-            header::OSABI::Modesto => 11,
-            header::OSABI::OpenBsd => 12,
-            header::OSABI::ArmAeabi => 64,
-            header::OSABI::Arm => 97,
-            header::OSABI::Standalone => 255,
-        };
-        file.write_all(&[osabi])?;
+        file.write_all(&[header.ident.os_abi as u8])?;
 
         // ABI バージョン
         file.write_all(&[header.ident.abi_version])?;
@@ -608,43 +453,13 @@ impl Linker {
         file.write_all(&[0; 7])?;
 
         // タイプ
-        let elf_type = match header.r#type {
-            header::Type::None => 0,
-            header::Type::Rel => 1,
-            header::Type::Exec => 2,
-            header::Type::Dyn => 3,
-            header::Type::Core => 4,
-            header::Type::Num => 5,
-            header::Type::Loos
-            | header::Type::Hios
-            | header::Type::Loproc
-            | header::Type::Hiproc => {
-                // これらは範囲を表す値なので、通常は直接使用しない
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "不正なELFタイプです",
-                ));
-            }
-        };
-        file.write_all(&(elf_type as u16).to_le_bytes())?;
+        file.write_all(&(header.r#type as u16).to_le_bytes())?;
 
         // マシン
-        let machine = match header.machine {
-            header::Machine::None => 0,
-            header::Machine::X86_64 => 62,
-            header::Machine::AArch64 => 183,
-            header::Machine::RiscV => 243,
-            header::Machine::Num => 253,
-        };
-        file.write_all(&(machine as u16).to_le_bytes())?;
+        file.write_all(&(header.machine as u16).to_le_bytes())?;
 
         // バージョン（拡張）
-        let version_ex = match header.version {
-            header::Version::None => 0,
-            header::Version::Current => 1,
-            header::Version::Num => 2,
-        };
-        file.write_all(&(version_ex as u32).to_le_bytes())?;
+        file.write_all(&(header.version as u32).to_le_bytes())?;
 
         // エントリポイント
         file.write_all(&header.entry.to_le_bytes())?;
@@ -687,28 +502,7 @@ impl Linker {
     ) -> io::Result<()> {
         for ph in headers {
             // タイプ
-            let ph_type = match ph.r#type {
-                segument::Type::Null => 0,
-                segument::Type::Load => 1,
-                segument::Type::Dynamic => 2,
-                segument::Type::Interp => 3,
-                segument::Type::Note => 4,
-                segument::Type::ShLib => 5,
-                segument::Type::Phdr => 6,
-                segument::Type::Tls => 7,
-                segument::Type::Num => 8,
-                // 以下のタイプは特殊な値を持つので、直接数値を指定
-                segument::Type::LoOs => 0x60000000,
-                segument::Type::GnuEhFrame => 0x6474e550,
-                segument::Type::GnuStack => 0x6474e551,
-                segument::Type::GnuRelro => 0x6474e552,
-                segument::Type::SunwBss => 0x6ffffffa,
-                segument::Type::SunwStack => 0x6ffffffb,
-                segument::Type::HiOs => 0x6fffffff,
-                segument::Type::LoProc => 0x70000000,
-                segument::Type::HiProc => 0x7fffffff,
-            };
-            file.write_all(&(ph_type as u32).to_le_bytes())?;
+            file.write_all(&(ph.r#type as u32).to_le_bytes())?;
 
             // フラグ
             let mut flags: u32 = 0;
@@ -958,10 +752,6 @@ impl Linker {
         data_base_addr: u64,
     ) {
         for symbol in resolved_symbols.values_mut() {
-            if !symbol.is_defined {
-                continue; // 未定義シンボルはスキップ
-            }
-
             // シンボルのセクションインデックスに応じて適切なベースアドレスを選択
             match symbol.section_index {
                 1 => {

@@ -1,4 +1,5 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u32)]
 pub enum Type {
     Null = 0,                // Program header table entry unused
     Load = 1,                // Loadable program segment
@@ -20,8 +21,8 @@ pub enum Type {
     HiProc = 0x7fffffff,     // End of processor-specific
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u32)]
-#[derive(Debug, PartialEq, Eq)]
 pub enum Flag {
     Executable = 0x1,      // Segment is executable
     Writable = 0x2,        // Segment is writable

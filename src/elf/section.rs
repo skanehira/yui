@@ -1,4 +1,5 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u32)]
 pub enum SectionType {
     Null = 0,                   // Section header table entry unused
     ProgBits = 1,               // Program data
@@ -40,7 +41,7 @@ pub enum SectionFlag {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Header<'a> {
+pub struct Header {
     pub name_idx: u32,           // Section name (string tbl index)
     pub name: String,            // Section name
     pub r#type: SectionType,     // Section type
@@ -52,5 +53,5 @@ pub struct Header<'a> {
     pub info: u32,               // Additional section information
     pub addralign: u64,          // Section alignment
     pub entsize: u64,            // Entry size if section holds table
-    pub data: &'a [u8],
+    pub data: Vec<u8>,
 }

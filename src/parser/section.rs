@@ -95,7 +95,7 @@ pub fn parse_header(
             let (rest, info) = le_u32(rest)?;
             let (rest, addralign) = le_u64(rest)?;
             let (rest, entsize) = le_u64(rest)?;
-            let data = &raw[offset as usize..(offset + size) as usize];
+            let data = raw[offset as usize..(offset + size) as usize].to_vec();
 
             let header = Header {
                 name_idx,

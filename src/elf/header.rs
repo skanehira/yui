@@ -1,4 +1,5 @@
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Class {
     #[default]
     None = 0,
@@ -7,7 +8,8 @@ pub enum Class {
     Num = 3,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Data {
     #[default]
     None = 0, // unknown
@@ -16,7 +18,8 @@ pub enum Data {
     Num = 3,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum IdentVersion {
     #[default]
     None = 0,
@@ -24,7 +27,8 @@ pub enum IdentVersion {
     Num = 2,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum OSABI {
     #[default]
     SystemV = 0, // or none
@@ -52,7 +56,8 @@ pub struct Ident {
     pub abi_version: u8,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
 pub enum Type {
     #[default]
     None = 0, // No file type
@@ -67,7 +72,8 @@ pub enum Type {
     Hiproc = 0xffff, // Processor-specific range end
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
 pub enum Machine {
     #[default]
     None = 0,
@@ -78,7 +84,8 @@ pub enum Machine {
     Num = 253,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u32)]
 pub enum Version {
     #[default]
     None = 0,

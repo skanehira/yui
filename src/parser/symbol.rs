@@ -106,7 +106,7 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
         },
         entry_count,
     )
-    .parse(symbol_header.data)?;
+    .parse(symbol_header.data.as_ref())?;
 
     Ok((rest, symbols))
 }
