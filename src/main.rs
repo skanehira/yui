@@ -16,7 +16,7 @@ fn main() {
     }
 
     let output_path = Path::new(&args[1]);
-    let input_paths: Vec<&Path> = args[2..].iter().map(|s| Path::new(s)).collect();
+    let input_paths: Vec<&Path> = args[2..].iter().map(Path::new).collect();
 
     // リンカーを初期化
     let mut linker = Linker::new();
