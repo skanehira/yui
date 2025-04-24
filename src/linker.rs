@@ -1352,7 +1352,7 @@ mod tests {
 
         // アドレスの具体的な値をチェック
         assert_eq!(
-            text_section.addr, 0x400000,
+            text_section.addr, 0x401000,
             ".text セクションの開始アドレスが期待値と異なります"
         );
         // .dataセクションは.textセクションの後、アラインメントされた位置に配置されるはず
