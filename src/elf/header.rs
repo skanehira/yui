@@ -56,20 +56,35 @@ pub struct Ident {
     pub abi_version: u8,
 }
 
+/// Represents the type of an ELF file.
+///
+/// This enum defines various types of ELF files, such as relocatable files,
+/// executable files, shared object files, and core files. It also includes
+/// ranges for OS-specific and processor-specific types.
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u16)]
 pub enum Type {
+    /// No file type.
     #[default]
-    None = 0, // No file type
-    Rel = 1,         // Relocatable file
-    Exec = 2,        // Executable file
-    Dyn = 3,         // Shared object file
-    Core = 4,        // Core file
-    Num = 5,         // Number of defined types
-    Loos = 0xfe00,   // OS-specific range start
-    Hios = 0xfeff,   // OS-specific range end
-    Loproc = 0xff00, // Processor-specific range start
-    Hiproc = 0xffff, // Processor-specific range end
+    None = 0,
+    /// Relocatable file.
+    Rel = 1,
+    /// Executable file.
+    Exec = 2,
+    /// Shared object file.
+    Dyn = 3,
+    /// Core file.
+    Core = 4,
+    /// Number of defined types.
+    Num = 5,
+    /// OS-specific range start.
+    Loos = 0xfe00,
+    /// OS-specific range end.
+    Hios = 0xfeff,
+    /// Processor-specific range start.
+    Loproc = 0xff00,
+    /// Processor-specific range end.
+    Hiproc = 0xffff,
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]

@@ -10,9 +10,18 @@ pub struct Info {
     pub symbol_index: u32,
 }
 
+/// Represents an ELF relocation entry with an explicit addend (Rela).
+///
+/// This struct corresponds to the Elf64_Rela structure in the ELF specification.
+/// It contains the information needed to relocate a symbol in the object file.
 #[derive(Debug, PartialEq, Eq)]
 pub struct RelocationAddend {
-    pub offset: u64, // Address
-    pub info: Info,  // Relocation type and symbol index
-    pub addend: i64, // Addend
+    /// The location to be modified, expressed as an offset from the beginning
+    /// of the section or file where the relocation applies.
+    pub offset: u64,
+    /// Contains both the symbol index and relocation type.
+    /// The specific encoding depends on the target architecture.
+    pub info: Info,
+    /// The constant addend used to compute the value to be stored into the relocatable field.
+    pub addend: i64,
 }

@@ -117,7 +117,7 @@ pub fn parse_header(
 
             let header = Header {
                 name_idx,
-                name: "".into(),
+                name: "".into(), // to be filled later
                 r#type,
                 flags,
                 addr,
@@ -127,7 +127,7 @@ pub fn parse_header(
                 info,
                 addralign,
                 entsize,
-                data,
+                section_raw_data: data,
             };
 
             Ok((rest, header))
@@ -135,12 +135,12 @@ pub fn parse_header(
         shnum,
     )
     .parse(&raw[shoff..])
-    .and_then(|(rest, mut headers)| {
+    .map(|(rest, mut headers)| {
         let string_table = &raw[headers[shstrndx].offset as usize..];
         for header in headers.iter_mut() {
-            header.name = helper::get_string_by_offset(string_table, header.name_idx as usize)?.1;
+            header.name = helper::get_string_by_offset(string_table, header.name_idx as usize);
         }
-        Ok((rest, headers))
+        (rest, headers)
     })
 }
 

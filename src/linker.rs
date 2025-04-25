@@ -2,10 +2,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io;
-use std::io::Seek;
-use std::io::SeekFrom;
-use std::io::Write;
+use std::io::{self, Seek, SeekFrom, Write};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
@@ -62,14 +59,14 @@ impl Linker {
         }
     }
 
-    pub fn add_object(mut self, path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let data = fs::read(path)?;
+    pub fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Box<dyn std::error::Error>> {
+        for path in paths {
+            let obj = fs::read(path)?;
+            let elf = parser::parse_elf(&obj)?.1;
+            self.objects.push(elf);
+        }
 
-        let elf = parser::parse_elf(&data)?.1;
-
-        self.objects.push(elf);
-
-        Ok(self)
+        Ok(())
     }
 
     pub fn link_to_file(
@@ -77,16 +74,11 @@ impl Linker {
         output_path: &Path,
         input_paths: &[&Path],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for input_path in input_paths {
-            let object = fs::read(input_path)?;
-            let elf = parser::parse_elf(&object)?.1;
-            self.objects.push(elf);
-        }
+        self.add_objects(input_paths)?;
         let output_sections = self.link()?;
         self.write_executable(output_path, &output_sections)
     }
 
-    /// 実行可能ファイルを出力する
     pub fn write_executable(
         &self,
         output_path: &Path,
@@ -133,21 +125,7 @@ impl Linker {
         for (name, symbol) in &resolved_symbols {
             if symbol.is_defined {
                 let name_offset = *symbol_name_offsets.get(name).unwrap_or(&0);
-                let sym_binding = match symbol.binding {
-                    symbol::Binding::Local => 0,  // STB_LOCAL
-                    symbol::Binding::Global => 1, // STB_GLOBAL
-                    symbol::Binding::Weak => 2,   // STB_WEAK
-                    _ => 0,
-                };
-                let sym_type = match symbol.r#type {
-                    symbol::Type::NoType => 0,  // STT_NOTYPE
-                    symbol::Type::Object => 1,  // STT_OBJECT
-                    symbol::Type::Func => 2,    // STT_FUNC
-                    symbol::Type::Section => 3, // STT_SECTION
-                    symbol::Type::File => 4,    // STT_FILE
-                    _ => 0,
-                };
-                let st_info = (sym_binding << 4) | sym_type;
+                let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
 
                 self.write_symbol_entry(
                     &mut symtab_data,
@@ -188,9 +166,6 @@ impl Linker {
         // セクション名文字列テーブル(.shstrtab)を作成
         let mut shstrtab_data: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
-
-        // セクション名文字列テーブルの先頭はNULL文字
-        shstrtab_data.push(0);
 
         // セクション名をテーブルに追加
         for section in output_sections {
@@ -235,6 +210,7 @@ impl Linker {
 
         // セクションヘッダーテーブルの位置を計算
         let sections_with_tables = [
+            // .text, .data, .bss などのセクション
             output_sections,
             &[
                 strtab_section.clone(),
@@ -549,7 +525,7 @@ impl Linker {
         // 未解決シンボルがあればエラー
         if !unresolved_symbols.is_empty() {
             return Err(format!(
-                "未解決のシンボルがあります: {:?}",
+                "There are unresolved symbols: {:?}",
                 unresolved_symbols
             ));
         }
@@ -719,8 +695,8 @@ impl Linker {
                 if section.name == section_name {
                     // このオブジェクトのセクションの開始オフセットを記録
                     offsets.insert((obj_idx, section_index), current_offset);
-                    section_data.extend_from_slice(&section.data);
-                    current_offset += section.data.len();
+                    section_data.extend_from_slice(&section.section_raw_data);
+                    current_offset += section.section_raw_data.len();
                 }
             }
         }
@@ -981,115 +957,84 @@ mod tests {
 
     #[test]
     fn test_basic_linker_creation() {
-        // テスト対象のオブジェクトファイルのパス
         let main_o = Path::new("src/parser/fixtures/main.o");
         let sub_o = Path::new("src/parser/fixtures/sub.o");
 
-        // オブジェクトファイルが存在することを確認
-        assert!(main_o.exists(), "main.o が見つかりません");
-        assert!(sub_o.exists(), "sub.o が見つかりません");
+        let mut linker = Linker::new();
 
-        // リンカーを作成
-        let linker = Linker::new();
+        linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        // オブジェクトファイルを追加
-        let linker = linker.add_object(main_o).expect("main.o の追加に失敗");
-        let linker = linker.add_object(sub_o).expect("sub.o の追加に失敗");
-
-        // オブジェクトファイルが正しく読み込まれているか
-        assert_eq!(linker.object_count(), 2, "オブジェクトファイルの数が不正");
+        assert_eq!(linker.object_count(), 2, "Invalid number of object files");
     }
 
     #[test]
     fn test_basic_object_parsing() {
-        // テスト対象のオブジェクトファイル
         let main_o = Path::new("src/parser/fixtures/main.o");
 
-        // リンカーを作成してオブジェクトを追加
-        let linker = Linker::new()
-            .add_object(main_o)
-            .expect("main.o の追加に失敗");
+        let mut linker = Linker::new();
+        linker.add_objects(&[main_o]).unwrap();
 
-        // main.o から _start シンボルが見つかるか確認
         let has_start = linker.has_symbol("_start");
-        assert!(has_start, "_start シンボルが見つかりません");
+        assert!(has_start, "Symbol _start not found");
 
-        // main.o から未定義シンボル x が見つかるか確認
         let uses_x = linker.has_undefined_symbol("x");
-        assert!(uses_x, "未定義シンボル x が見つかりません");
+        assert!(uses_x, "Undefined symbol x not found");
     }
 
     #[test]
     fn test_symbol_resolution() {
-        // main.o と sub.o を読み込む
         let main_o = Path::new("src/parser/fixtures/main.o");
         let sub_o = Path::new("src/parser/fixtures/sub.o");
 
-        let linker = Linker::new()
-            .add_object(main_o)
-            .expect("main.o の読み込み失敗")
-            .add_object(sub_o)
-            .expect("sub.o の読み込み失敗");
+        let mut linker = Linker::new();
+        linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        // シンボル解決を実行
         let (resolved_symbols, unresolved_symbols) = linker.resolve_symbols();
 
-        // 全てのシンボルが解決されていることを確認
         assert!(
             unresolved_symbols.is_empty(),
-            "未解決のシンボルがあります: {:?}",
+            "There are unresolved symbols: {:?}",
             unresolved_symbols
         );
 
-        // '_start'と'x'シンボルが解決されていることを確認
         assert!(
             resolved_symbols.contains_key("_start"),
-            "_start シンボルが解決されていません"
+            "Symbol _start is not resolved"
         );
         assert!(
             resolved_symbols.contains_key("x"),
-            "x シンボルが解決されていません"
+            "Symbol x is not resolved"
         );
 
-        // 'x'シンボルが適切に解決されているか確認
-        // 'x'はsub.oで定義され、値は23になっているはず
-        if let Some(x_symbol) = resolved_symbols.get("x") {
-            // sub.oから来ているかチェック（オブジェクトインデックスは1であるべき）
-            assert_eq!(x_symbol.object_index, 1, "x シンボルのオブジェクト元が不正");
-        } else {
-            panic!("x シンボルが見つかりません");
-        }
+        let x_symbol = resolved_symbols.get("x").unwrap();
+        assert_eq!(
+            x_symbol.object_index, 1,
+            "Invalid object source for symbol x"
+        );
     }
 
     #[test]
     fn test_section_layout() {
-        // main.o と sub.o を読み込む
         let main_o = Path::new("src/parser/fixtures/main.o");
         let sub_o = Path::new("src/parser/fixtures/sub.o");
 
-        let linker = Linker::new()
-            .add_object(main_o)
-            .expect("main.o の読み込み失敗")
-            .add_object(sub_o)
-            .expect("sub.o の読み込み失敗");
+        let mut linker = Linker::new();
+        linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        // シンボル解決を実行
         let (mut resolved_symbols, _) = linker.resolve_symbols();
 
-        // セクション配置を実行
         let output_sections = linker.layout_sections(&mut resolved_symbols);
 
-        // 必要なセクションが存在するか確認
+        let mut section_iter = output_sections.iter();
         assert!(
-            output_sections.iter().any(|s| s.name == ".text"),
-            ".text セクションがありません"
+            section_iter.any(|s| s.name == ".text"),
+            "No .text section found"
         );
         assert!(
-            output_sections.iter().any(|s| s.name == ".data"),
-            ".data セクションがありません"
+            section_iter.any(|s| s.name == ".data"),
+            "No .data section found"
         );
 
-        // セクションの順序が正しいか確認 (.text -> .data)
         let text_idx = output_sections
             .iter()
             .position(|s| s.name == ".text")
@@ -1100,118 +1045,88 @@ mod tests {
             .unwrap();
         assert!(
             text_idx < data_idx,
-            "セクションの順序が不正: .text は .data より前にあるべき"
+            "Invalid section order: .text should be before .data"
         );
 
-        // .textセクションが実行可能属性を持っているか確認
         let text_section = &output_sections[text_idx];
         assert!(
             text_section
                 .flags
                 .contains(&section::SectionFlag::ExecInstr),
-            ".text セクションに実行可能フラグがありません"
+            "No executable flag in .text section"
         );
 
-        // .dataセクションが書き込み可能属性を持っているか確認
         let data_section = &output_sections[data_idx];
         assert!(
             data_section.flags.contains(&section::SectionFlag::Write),
-            ".data セクションに書き込み可能フラグがありません"
+            "No writable flag in .data section"
         );
 
-        // セクションのアドレスが適切に割り当てられているか確認
-        assert!(text_section.addr > 0, ".text セクションのアドレスが不正");
+        assert!(text_section.addr > 0, "Invalid address for .text section");
         assert!(
             data_section.addr > text_section.addr,
-            ".data セクションは .text セクションの後に配置されるべき"
+            ".data section should be placed after .text section"
         );
 
-        // アドレスの具体的な値をチェック
         assert_eq!(
             text_section.addr, 0x401000,
-            ".text セクションの開始アドレスが期待値と異なります"
+            "Start address of .text section differs from expected value"
         );
-        // .dataセクションは.textセクションの後、アラインメントされた位置に配置されるはず
+
         let expected_data_addr = align(text_section.addr + text_section.size, 0x1000);
         assert_eq!(
             data_section.addr, expected_data_addr,
-            ".data セクションの開始アドレスが期待値と異なります"
+            "Start address of .data section differs from expected value"
         );
 
-        // セクションのサイズが適切か確認
-        assert!(text_section.size > 0, ".text セクションのサイズが不正");
-        assert!(data_section.size > 0, ".data セクションのサイズが不正");
+        assert!(text_section.size > 0, "Invalid size for .text section");
+        assert!(data_section.size > 0, "Invalid size for .data section");
 
-        // xシンボルのアドレスが.dataセクション内にあるか確認
         let x_symbol = resolved_symbols.get("x").unwrap();
         assert!(
             x_symbol.value >= data_section.addr
                 && x_symbol.value < data_section.addr + data_section.size,
-            "xシンボルのアドレスが.dataセクション内にありません"
+            "Address of symbol x is not within .data section"
         );
 
-        // _startシンボルが.textセクション内にあるか確認
         let start_symbol = resolved_symbols.get("_start").unwrap();
         assert!(
             start_symbol.value >= text_section.addr
                 && start_symbol.value < text_section.addr + text_section.size,
-            "_startシンボルのアドレスが.textセクション内にありません"
+            "Address of symbol _start is not within .text section"
         );
 
-        // シンボルのアドレスが適切に更新されているか確認
-        // _startシンボルは.textセクションの先頭に配置されるべき
         let expected_start_addr = text_section.addr;
         assert_eq!(
             start_symbol.value, expected_start_addr,
-            "_startシンボルのアドレスが期待値と異なります"
+            "Address of symbol _start differs from expected value"
         );
 
-        // xシンボルは.dataセクションの先頭に配置されるべき
         let expected_x_addr = data_section.addr;
         assert_eq!(
             x_symbol.value, expected_x_addr,
-            "xシンボルのアドレスが期待値と異なります"
+            "Address of symbol x differs from expected value"
         );
     }
 
     #[test]
     fn test_apply_relocations() {
-        // main.o と sub.o を読み込む
         let main_o = Path::new("src/parser/fixtures/main.o");
         let sub_o = Path::new("src/parser/fixtures/sub.o");
 
-        let linker = Linker::new()
-            .add_object(main_o)
-            .expect("main.o の読み込み失敗")
-            .add_object(sub_o)
-            .expect("sub.o の読み込み失敗");
+        let mut linker = Linker::new();
+        linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        // リンク処理を実行
-        let output_sections = linker.link().expect("リンク処理に失敗");
+        let output_sections = linker.link().unwrap();
 
-        // .text セクションを見つける
-        let text_section = output_sections
-            .iter()
-            .find(|s| s.name == ".text")
-            .expect(".text セクションが見つかりません");
+        let text_section = output_sections.iter().find(|s| s.name == ".text").unwrap();
 
-        // 実行可能ビットが設定されていることを確認
-        assert!(
-            text_section
-                .flags
-                .contains(&section::SectionFlag::ExecInstr),
-            ".text セクションに実行可能フラグがありません"
-        );
-
-        // main.o に含まれる再配置エントリによって .text セクションの命令が更新されたことを確認
-        // 特定のオフセットにある命令を検査
-        let offset = 0; // 最初の再配置エントリのオフセット
+        let offset = 0;
         assert!(
             offset + 4 <= text_section.data.len(),
-            "命令のオフセットが範囲外"
+            "Instruction offset is out of range"
         );
 
-        // 命令データを取得
         let instruction = u32::from_le_bytes([
             text_section.data[offset],
             text_section.data[offset + 1],
@@ -1219,15 +1134,8 @@ mod tests {
             text_section.data[offset + 3],
         ]);
 
-        // 更新された命令のアドレスフィールドをチェック
-        // 命令の形式はADRで、下位21ビットが相対アドレスを格納
         let addr_field = instruction & 0x1FFFFF;
 
-        // アドレスフィールドが0でないことを確認
-        // 実際の値は環境によって異なるので、詳細な値のチェックはしない
-        assert!(
-            addr_field != 0,
-            "再配置によるアドレス更新が行われていません"
-        );
+        assert!(addr_field != 0, "Address field not updated by relocation");
     }
 }

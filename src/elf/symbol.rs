@@ -1,4 +1,5 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Type {
     NoType = 0,  // Symbol type is unspecified
     Object = 1,  // Symbol is a data object
@@ -15,6 +16,7 @@ pub enum Type {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Binding {
     Local = 0,   // Local symbol
     Global = 1,  // Global symbol

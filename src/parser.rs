@@ -14,7 +14,7 @@ use nom::IResult;
 /// the parsed value, and any potential parsing error.
 pub type ParseResult<'a, T> = IResult<&'a [u8], T, ParseError>;
 
-/// Parses the raw bytes of an ELF file into an `Elf` structure.
+/// Parses the raw bytes of an ELF file into an `ELF` structure.
 ///
 /// # Arguments
 ///
@@ -22,7 +22,7 @@ pub type ParseResult<'a, T> = IResult<&'a [u8], T, ParseError>;
 ///
 /// # Returns
 ///
-/// A `ParseResult` containing the parsed `Elf` structure or a `ParseError` if parsing fails.
+/// A `ParseResult` containing the parsed `ELF` structure or a `ParseError` if parsing fails.
 pub fn parse_elf(raw: &[u8]) -> ParseResult<ELF> {
     let header = header::parse(raw)?.1;
 

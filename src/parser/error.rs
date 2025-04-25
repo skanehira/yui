@@ -1,4 +1,4 @@
-trait ElfParseError {
+trait ELFParseError {
     fn as_parse_error(&self) -> ParseError;
 }
 
@@ -13,7 +13,7 @@ pub enum ParseError {
     InvalidMachine(u16),
     InvalidVersion(u32),
     InvalidHeaderSize(u8),
-    FileTypeNotElf([u8; 4]),
+    FileTypeNotELF([u8; 4]),
     // Section Header
     InvalidSectionType(u32),
     InvalidSectionFlags(u64),
@@ -26,7 +26,7 @@ pub enum ParseError {
     Nom(String),
 }
 
-impl ElfParseError for ParseError {
+impl ELFParseError for ParseError {
     fn as_parse_error(&self) -> ParseError {
         self.clone()
     }
@@ -43,7 +43,7 @@ impl<I: std::fmt::Debug> nom::error::ParseError<I> for ParseError {
 }
 
 // workaround
-impl<I, E: ElfParseError> nom::error::FromExternalError<I, E> for ParseError {
+impl<I, E: ELFParseError> nom::error::FromExternalError<I, E> for ParseError {
     fn from_external_error(_input: I, _kind: nom::error::ErrorKind, e: E) -> Self {
         e.as_parse_error()
     }

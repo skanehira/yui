@@ -67,7 +67,7 @@ pub fn parse(section_headers: &[section::Header]) -> ParseResult<Vec<RelocationA
         },
         entry_count,
     )
-    .parse(header.data.as_ref())?;
+    .parse(header.section_raw_data.as_ref())?;
 
     Ok((rest, relocations))
 }

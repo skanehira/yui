@@ -110,5 +110,5 @@ pub struct Header {
     /// Size of each entry in the section, if it holds a table.
     pub entsize: u64,
     /// Raw data contained in the section.
-    pub data: Vec<u8>,
+    pub section_raw_data: Vec<u8>,
 }
