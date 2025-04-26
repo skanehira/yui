@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+pub mod output;
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Seek, SeekFrom, Write};
@@ -7,45 +9,8 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use crate::elf::ELF;
-use crate::elf::{header, program_header, relocation, section, segument, symbol};
+use crate::elf::{header, program_header, relocation, section, segument};
 use crate::parser;
-
-#[derive(Debug, Clone)]
-pub struct OutputSection {
-    pub name: String,
-    pub r#type: section::SectionType,
-    pub flags: Vec<section::SectionFlag>,
-    pub addr: u64,
-    pub offset: u64,
-    pub size: u64,
-    pub data: Vec<u8>,
-    pub align: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ResolvedSymbol {
-    pub name: String,
-    pub value: u64,
-    pub size: u64,
-    pub r#type: symbol::Type,
-    pub binding: symbol::Binding,
-    pub section_index: u16,
-    pub object_index: usize,
-    pub is_defined: bool,
-}
-
-impl ResolvedSymbol {
-    pub fn is_stronger_than(&self, other: &Self) -> bool {
-        match (self.binding, other.binding) {
-            (symbol::Binding::Local, _) => true,
-            (_, symbol::Binding::Weak) => true,
-            (symbol::Binding::Global, symbol::Binding::Global) => false,
-            (symbol::Binding::Global, symbol::Binding::Local) => false,
-            (symbol::Binding::Weak, _) => false,
-            _ => false,
-        }
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct Linker {
@@ -82,7 +47,7 @@ impl Linker {
     pub fn write_executable(
         &self,
         output_path: &Path,
-        output_sections: &[OutputSection],
+        output_sections: &[output::Section],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -96,13 +61,6 @@ impl Linker {
 
         // セクションレイアウトを行う（シンボルアドレスが更新される）
         self.layout_sections(&mut resolved_symbols);
-
-        let Some(ResolvedSymbol {
-            value: entry_point, ..
-        }) = resolved_symbols.get("_start")
-        else {
-            return Err("sybmol _start not found".into());
-        };
 
         // シンボル文字列テーブル(.strtab)を作成
         let mut strtab_data: Vec<u8> = Vec::new();
@@ -123,24 +81,22 @@ impl Linker {
 
         // 各シンボルのエントリを追加
         for (name, symbol) in &resolved_symbols {
-            if symbol.is_defined {
-                let name_offset = *symbol_name_offsets.get(name).unwrap_or(&0);
-                let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
+            let name_offset = *symbol_name_offsets.get(name).unwrap_or(&0);
+            let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
 
-                self.write_symbol_entry(
-                    &mut symtab_data,
-                    name_offset as u32,
-                    symbol.value,
-                    symbol.size,
-                    st_info,
-                    0, // st_other
-                    symbol.section_index,
-                );
-            }
+            self.write_symbol_entry(
+                &mut symtab_data,
+                name_offset as u32,
+                symbol.value,
+                symbol.size,
+                st_info,
+                0, // st_other
+                symbol.section_index,
+            );
         }
 
         // シンボル文字列テーブルセクションを作成
-        let strtab_section = OutputSection {
+        let strtab_section = output::Section {
             name: ".strtab".to_string(),
             r#type: section::SectionType::StrTab,
             flags: vec![],
@@ -152,7 +108,7 @@ impl Linker {
         };
 
         // シンボルテーブルセクションを作成
-        let symtab_section = OutputSection {
+        let symtab_section = output::Section {
             name: ".symtab".to_string(),
             r#type: section::SectionType::SymTab,
             flags: vec![],
@@ -193,7 +149,7 @@ impl Linker {
         shstrtab_data.push(0); // NULL終端
 
         // セクション名文字列テーブルセクションを作成
-        let shstrtab_section = OutputSection {
+        let shstrtab_section = output::Section {
             name: ".shstrtab".to_string(),
             r#type: section::SectionType::StrTab,
             flags: vec![],
@@ -206,10 +162,18 @@ impl Linker {
 
         // ELFヘッダーを作成
         let mut elf_header = self.create_elf_header(output_sections);
+
+        let Some(output::ResolvedSymbol {
+            value: entry_point, ..
+        }) = resolved_symbols.get("_start")
+        else {
+            return Err("sybmol _start not found".into());
+        };
+
         elf_header.entry = *entry_point;
 
         // セクションヘッダーテーブルの位置を計算
-        let sections_with_tables = [
+        let section_tables = [
             // .text, .data, .bss などのセクション
             output_sections,
             &[
@@ -221,7 +185,7 @@ impl Linker {
         .concat();
 
         // セクションヘッダーテーブルの位置を設定
-        let section_data_end = sections_with_tables
+        let section_data_end = section_tables
             .iter()
             .map(|s| s.offset + align(s.size, 8))
             .max()
@@ -230,10 +194,10 @@ impl Linker {
         let sh_offset = align(section_data_end, 8);
         elf_header.shoff = sh_offset;
         elf_header.shentsize = 64; // セクションヘッダーエントリのサイズ (64ビットELF)
-        elf_header.shnum = (sections_with_tables.len() + 1) as u16; // NULL セクションも含める
+        elf_header.shnum = (section_tables.len() + 1) as u16; // NULL セクションも含める
 
         // .shstrtabのインデックスを正しく設定
-        let shstrtab_idx = sections_with_tables
+        let shstrtab_idx = section_tables
             .iter()
             .position(|s| s.name == ".shstrtab")
             .unwrap_or(0);
@@ -249,7 +213,7 @@ impl Linker {
         self.write_program_headers(&mut file, &program_headers)?;
 
         // セクションデータを書き込み
-        self.write_sections(&mut file, &sections_with_tables)?;
+        self.write_sections(&mut file, &section_tables)?;
 
         // セクションヘッダーテーブルを書き込み
         file.seek(SeekFrom::Start(sh_offset))?;
@@ -258,7 +222,7 @@ impl Linker {
         self.write_section_header(&mut file, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
 
         // 各セクションのヘッダーを書き込み
-        for section in sections_with_tables.iter() {
+        for section in section_tables.iter() {
             let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
             let sh_type = section.r#type as u32;
             let mut sh_flags: u64 = 0;
@@ -276,7 +240,7 @@ impl Linker {
             let (sh_link, sh_info) = if section.name == ".symtab" {
                 // sh_link: 文字列テーブルのセクションインデックス
                 // sh_info: ローカルシンボルの数 + 1
-                let strtab_idx = sections_with_tables
+                let strtab_idx = section_tables
                     .iter()
                     .position(|s| s.name == ".strtab")
                     .unwrap_or(0)
@@ -313,7 +277,7 @@ impl Linker {
     }
 
     /// ELFヘッダーを生成
-    fn create_elf_header(&self, output_sections: &[OutputSection]) -> header::Header {
+    fn create_elf_header(&self, output_sections: &[output::Section]) -> header::Header {
         // デフォルトのヘッダー
         let mut elf_header = header::Header {
             ident: header::Ident {
@@ -346,7 +310,7 @@ impl Linker {
     }
 
     /// プログラムヘッダー数をカウント
-    fn count_program_headers(&self, _output_sections: &[OutputSection]) -> usize {
+    fn count_program_headers(&self, _output_sections: &[output::Section]) -> usize {
         // 現在はテキストセクションとデータセクションの2つ
         2
     }
@@ -354,7 +318,7 @@ impl Linker {
     /// プログラムヘッダーを生成
     fn create_program_headers(
         &self,
-        output_sections: &[OutputSection],
+        output_sections: &[output::Section],
     ) -> Vec<program_header::ProgramHeader> {
         let mut program_headers = Vec::new();
 
@@ -394,45 +358,25 @@ impl Linker {
     /// ELFヘッダーをファイルに書き込む
     fn write_elf_header(&self, file: &mut fs::File, header: &header::Header) -> io::Result<()> {
         let bytes = [
-            // ELF マジックナンバー
             &[0x7f, b'E', b'L', b'F'],
-            // ELFクラス（32/64ビット）
             [header.ident.class as u8].as_slice(),
-            // エンディアン
             [header.ident.data as u8].as_slice(),
-            // バージョン
             [header.ident.version as u8].as_slice(),
-            // OS ABI
             [header.ident.os_abi as u8].as_slice(),
-            // ABI バージョン
             [header.ident.abi_version].as_slice(),
-            // パディング
             [0; 7].as_slice(),
-            // タイプ
             (header.r#type as u16).to_le_bytes().as_slice(),
-            // マシン
             (header.machine as u16).to_le_bytes().as_slice(),
-            // バージョン（拡張）
             (header.version as u32).to_le_bytes().as_slice(),
-            // エントリポイント
             header.entry.to_le_bytes().as_slice(),
-            // プログラムヘッダーオフセット
             header.phoff.to_le_bytes().as_slice(),
-            // セクションヘッダーオフセット
             header.shoff.to_le_bytes().as_slice(),
-            // フラグ
             header.flags.to_le_bytes().as_slice(),
-            // ELFヘッダーサイズ
             header.ehsize.to_le_bytes().as_slice(),
-            // プログラムヘッダーエントリサイズ
             header.phentsize.to_le_bytes().as_slice(),
-            // プログラムヘッダー数
             header.phnum.to_le_bytes().as_slice(),
-            // セクションヘッダーエントリサイズ
             header.shentsize.to_le_bytes().as_slice(),
-            // セクションヘッダー数
             header.shnum.to_le_bytes().as_slice(),
-            // セクション名文字列テーブルのインデックス
             header.shstrndx.to_le_bytes().as_slice(),
         ]
         .concat();
@@ -447,9 +391,6 @@ impl Linker {
         headers: &[program_header::ProgramHeader],
     ) -> io::Result<()> {
         for ph in headers {
-            // タイプ
-            file.write_all(&(ph.r#type as u32).to_le_bytes())?;
-
             // フラグ
             let mut flags: u32 = 0;
             for flag in &ph.flags {
@@ -464,32 +405,27 @@ impl Linker {
                 };
                 flags |= bit;
             }
-            file.write_all(&flags.to_le_bytes())?;
 
-            // ファイルオフセット
-            file.write_all(&ph.offset.to_le_bytes())?;
+            let bytes = &[
+                (ph.r#type as u32).to_le_bytes().as_slice(),
+                flags.to_le_bytes().as_slice(),
+                ph.offset.to_le_bytes().as_slice(),
+                ph.vaddr.to_le_bytes().as_slice(),
+                ph.paddr.to_le_bytes().as_slice(),
+                ph.filesz.to_le_bytes().as_slice(),
+                ph.memsz.to_le_bytes().as_slice(),
+                ph.align.to_le_bytes().as_slice(),
+            ]
+            .concat();
 
-            // 仮想アドレス
-            file.write_all(&ph.vaddr.to_le_bytes())?;
-
-            // 物理アドレス
-            file.write_all(&ph.paddr.to_le_bytes())?;
-
-            // ファイルサイズ
-            file.write_all(&ph.filesz.to_le_bytes())?;
-
-            // メモリサイズ
-            file.write_all(&ph.memsz.to_le_bytes())?;
-
-            // アラインメント
-            file.write_all(&ph.align.to_le_bytes())?;
+            file.write_all(bytes)?
         }
 
         Ok(())
     }
 
     /// セクションデータをファイルに書き込む
-    fn write_sections(&self, file: &mut fs::File, sections: &[OutputSection]) -> io::Result<()> {
+    fn write_sections(&self, file: &mut fs::File, sections: &[output::Section]) -> io::Result<()> {
         for section in sections {
             // ファイルポインタをセクションのオフセット位置に移動
             file.seek(SeekFrom::Start(section.offset))?;
@@ -502,7 +438,7 @@ impl Linker {
     }
 
     /// リンク処理全体を実行する
-    pub fn link(&self) -> Result<Vec<OutputSection>, String> {
+    pub fn link(&self) -> Result<Vec<output::Section>, String> {
         // 1. シンボル解決を実行
         let (mut resolved_symbols, unresolved_symbols) = self.resolve_symbols();
 
@@ -554,8 +490,8 @@ impl Linker {
     }
 
     /// シンボル解決を行い、解決されたシンボルと未解決シンボルを返す
-    pub fn resolve_symbols(&self) -> (HashMap<String, ResolvedSymbol>, Vec<String>) {
-        let mut resolved_symbols: HashMap<String, ResolvedSymbol> = HashMap::new();
+    pub fn resolve_symbols(&self) -> (HashMap<String, output::ResolvedSymbol>, Vec<String>) {
+        let mut resolved_symbols: HashMap<String, output::ResolvedSymbol> = HashMap::new();
 
         // 各オブジェクトファイルのシンボルを処理
         for (obj_idx, obj) in self.objects.iter().enumerate() {
@@ -567,7 +503,7 @@ impl Linker {
                     continue;
                 }
 
-                let new_symbol = ResolvedSymbol {
+                let new_symbol = output::ResolvedSymbol {
                     name: symbol.name.clone(),
                     value: symbol.value,
                     size: symbol.size,
@@ -612,9 +548,9 @@ impl Linker {
     /// セクションの配置を行い、出力セクションのリストを返す
     pub fn layout_sections(
         &self,
-        resolved_symbols: &mut HashMap<String, ResolvedSymbol>,
-    ) -> Vec<OutputSection> {
-        let mut output_sections: Vec<OutputSection> = Vec::new();
+        resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
+    ) -> Vec<output::Section> {
+        let mut output_sections: Vec<output::Section> = Vec::new();
 
         // .textセクションと.dataセクションを統合し、オフセット情報を取得
         let (text_data, text_offsets) = self.merge_sections(".text", 1);
@@ -623,7 +559,7 @@ impl Linker {
         // 基本的なメモリレイアウトを決定
         // まず.textセクションから設定
         let base_addr = 0x400000; // 実行可能ファイルの典型的な開始アドレス
-        let text_section = OutputSection {
+        let text_section = output::Section {
             name: ".text".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
@@ -636,7 +572,7 @@ impl Linker {
 
         // .dataセクションは.textの後に配置
         let data_addr = align(base_addr + 0x2000, 0x1000); // 修正: 明示的に0x402000に配置
-        let data_section = OutputSection {
+        let data_section = output::Section {
             name: ".data".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
@@ -691,7 +627,7 @@ impl Linker {
     /// シンボルの最終アドレスを更新する
     fn update_symbol_addresses(
         &self,
-        resolved_symbols: &mut HashMap<String, ResolvedSymbol>,
+        resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
         text_offsets: &HashMap<(usize, u16), usize>,
         text_base_addr: u64,
         data_offsets: &HashMap<(usize, u16), usize>,
@@ -731,10 +667,10 @@ impl Linker {
     /// 解決されたシンボルのアドレスを使用して参照を更新する
     pub fn apply_relocations(
         &self,
-        output_sections: &mut [OutputSection],
-        resolved_symbols: &HashMap<String, ResolvedSymbol>,
+        output_sections: &mut [output::Section],
+        resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(), String> {
-        // セクション名からOutputSectionの位置を特定するマップ
+        // セクション名からoutput::Sectionの位置を特定するマップ
         let section_indices: HashMap<String, usize> = output_sections
             .iter()
             .enumerate()
@@ -764,9 +700,9 @@ impl Linker {
         &self,
         obj_idx: usize,
         reloc: &relocation::RelocationAddend,
-        output_sections: &mut [OutputSection],
+        output_sections: &mut [output::Section],
         section_indices: &HashMap<String, usize>,
-        resolved_symbols: &HashMap<String, ResolvedSymbol>,
+        resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(), String> {
         // 再配置タイプに応じた処理
         match reloc.info.r#type {
