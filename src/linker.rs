@@ -393,67 +393,51 @@ impl Linker {
 
     /// ELFヘッダーをファイルに書き込む
     fn write_elf_header(&self, file: &mut fs::File, header: &header::Header) -> io::Result<()> {
-        // ELF マジックナンバー
-        file.write_all(&[0x7f, b'E', b'L', b'F'])?;
+        let bytes = [
+            // ELF マジックナンバー
+            &[0x7f, b'E', b'L', b'F'],
+            // ELFクラス（32/64ビット）
+            [header.ident.class as u8].as_slice(),
+            // エンディアン
+            [header.ident.data as u8].as_slice(),
+            // バージョン
+            [header.ident.version as u8].as_slice(),
+            // OS ABI
+            [header.ident.os_abi as u8].as_slice(),
+            // ABI バージョン
+            [header.ident.abi_version].as_slice(),
+            // パディング
+            [0; 7].as_slice(),
+            // タイプ
+            (header.r#type as u16).to_le_bytes().as_slice(),
+            // マシン
+            (header.machine as u16).to_le_bytes().as_slice(),
+            // バージョン（拡張）
+            (header.version as u32).to_le_bytes().as_slice(),
+            // エントリポイント
+            header.entry.to_le_bytes().as_slice(),
+            // プログラムヘッダーオフセット
+            header.phoff.to_le_bytes().as_slice(),
+            // セクションヘッダーオフセット
+            header.shoff.to_le_bytes().as_slice(),
+            // フラグ
+            header.flags.to_le_bytes().as_slice(),
+            // ELFヘッダーサイズ
+            header.ehsize.to_le_bytes().as_slice(),
+            // プログラムヘッダーエントリサイズ
+            header.phentsize.to_le_bytes().as_slice(),
+            // プログラムヘッダー数
+            header.phnum.to_le_bytes().as_slice(),
+            // セクションヘッダーエントリサイズ
+            header.shentsize.to_le_bytes().as_slice(),
+            // セクションヘッダー数
+            header.shnum.to_le_bytes().as_slice(),
+            // セクション名文字列テーブルのインデックス
+            header.shstrndx.to_le_bytes().as_slice(),
+        ]
+        .concat();
 
-        // ELFクラス（32/64ビット）
-        file.write_all(&[header.ident.class as u8])?;
-
-        // エンディアン
-        file.write_all(&[header.ident.data as u8])?;
-
-        // バージョン
-        file.write_all(&[header.ident.version as u8])?;
-
-        // OS ABI
-        file.write_all(&[header.ident.os_abi as u8])?;
-
-        // ABI バージョン
-        file.write_all(&[header.ident.abi_version])?;
-
-        // パディング
-        file.write_all(&[0; 7])?;
-
-        // タイプ
-        file.write_all(&(header.r#type as u16).to_le_bytes())?;
-
-        // マシン
-        file.write_all(&(header.machine as u16).to_le_bytes())?;
-
-        // バージョン（拡張）
-        file.write_all(&(header.version as u32).to_le_bytes())?;
-
-        // エントリポイント
-        file.write_all(&header.entry.to_le_bytes())?;
-
-        // プログラムヘッダーオフセット
-        file.write_all(&header.phoff.to_le_bytes())?;
-
-        // セクションヘッダーオフセット
-        file.write_all(&header.shoff.to_le_bytes())?;
-
-        // フラグ
-        file.write_all(&header.flags.to_le_bytes())?;
-
-        // ELFヘッダーサイズ
-        file.write_all(&header.ehsize.to_le_bytes())?;
-
-        // プログラムヘッダーエントリサイズ
-        file.write_all(&header.phentsize.to_le_bytes())?;
-
-        // プログラムヘッダー数
-        file.write_all(&header.phnum.to_le_bytes())?;
-
-        // セクションヘッダーエントリサイズ
-        file.write_all(&header.shentsize.to_le_bytes())?;
-
-        // セクションヘッダー数
-        file.write_all(&header.shnum.to_le_bytes())?;
-
-        // セクション名文字列テーブルのインデックス
-        file.write_all(&header.shstrndx.to_le_bytes())?;
-
-        Ok(())
+        file.write_all(&bytes)
     }
 
     /// プログラムヘッダーをファイルに書き込む
@@ -910,37 +894,21 @@ impl Linker {
         sh_addralign: u64,
         sh_entsize: u64,
     ) -> io::Result<()> {
-        // セクション名のインデックス
-        file.write_all(&name.to_le_bytes())?;
+        let bytes = [
+            name.to_le_bytes().as_slice(),         // セクション名のインデックス
+            sh_type.to_le_bytes().as_slice(),      // セクションタイプ
+            sh_flags.to_le_bytes().as_slice(),     // セクションフラグ
+            sh_addr.to_le_bytes().as_slice(),      // メモリ上のアドレス
+            sh_offset.to_le_bytes().as_slice(),    // ファイル内オフセット
+            sh_size.to_le_bytes().as_slice(),      // セクションサイズ
+            sh_link.to_le_bytes().as_slice(),      // リンク情報
+            sh_info.to_le_bytes().as_slice(),      // 追加情報
+            sh_addralign.to_le_bytes().as_slice(), // アライメント
+            sh_entsize.to_le_bytes().as_slice(),   // エントリサイズ
+        ]
+        .concat();
 
-        // セクションタイプ
-        file.write_all(&sh_type.to_le_bytes())?;
-
-        // セクションフラグ
-        file.write_all(&sh_flags.to_le_bytes())?;
-
-        // メモリ上のアドレス
-        file.write_all(&sh_addr.to_le_bytes())?;
-
-        // ファイル内オフセット
-        file.write_all(&sh_offset.to_le_bytes())?;
-
-        // セクションサイズ
-        file.write_all(&sh_size.to_le_bytes())?;
-
-        // リンク情報
-        file.write_all(&sh_link.to_le_bytes())?;
-
-        // 追加情報
-        file.write_all(&sh_info.to_le_bytes())?;
-
-        // アライメント
-        file.write_all(&sh_addralign.to_le_bytes())?;
-
-        // エントリサイズ (固定サイズのテーブルの場合)
-        file.write_all(&sh_entsize.to_le_bytes())?;
-
-        Ok(())
+        file.write_all(&bytes)
     }
 }
 
