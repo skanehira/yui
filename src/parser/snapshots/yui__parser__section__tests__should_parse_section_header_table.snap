@@ -15,7 +15,7 @@ expression: header_table
         info: 0,
         addralign: 0,
         entsize: 0,
-        data: [],
+        section_raw_data: [],
     },
     Header {
         name_idx: 27,
@@ -32,7 +32,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 0,
-        data: [],
+        section_raw_data: [],
     },
     Header {
         name_idx: 33,
@@ -49,7 +49,7 @@ expression: header_table
         info: 0,
         addralign: 4,
         entsize: 0,
-        data: [
+        section_raw_data: [
             23,
             0,
             0,
@@ -71,7 +71,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 0,
-        data: [],
+        section_raw_data: [],
     },
     Header {
         name_idx: 44,
@@ -88,7 +88,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 1,
-        data: [
+        section_raw_data: [
             0,
             71,
             67,
@@ -143,7 +143,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 0,
-        data: [],
+        section_raw_data: [],
     },
     Header {
         name_idx: 1,
@@ -157,7 +157,7 @@ expression: header_table
         info: 8,
         addralign: 8,
         entsize: 24,
-        data: [
+        section_raw_data: [
             0,
             0,
             0,
@@ -388,7 +388,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 0,
-        data: [
+        section_raw_data: [
             0,
             115,
             117,
@@ -415,7 +415,7 @@ expression: header_table
         info: 0,
         addralign: 1,
         entsize: 0,
-        data: [
+        section_raw_data: [
             0,
             46,
             115,
