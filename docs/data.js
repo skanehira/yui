@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1742973294440,
+  "lastUpdate": 1745735911755,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -467,6 +467,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 889,
             "range": "± 20.12",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02f9e9e64caf255be2f44a2451c302ca63a0064a",
+          "message": "Merge pull request #3 from skanehira/impl-linker\n\nfeat: Add ELF linker implementation",
+          "timestamp": "2025-04-27T15:37:50+09:00",
+          "tree_id": "431775867bee72bed29568aadf070f4eb2750026",
+          "url": "https://github.com/skanehira/yui/commit/02f9e9e64caf255be2f44a2451c302ca63a0064a"
+        },
+        "date": 1745735910895,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 92.47,
+            "range": "± 2.73",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1139.22,
+            "range": "± 10.94",
             "unit": "ns/iter"
           }
         ]
