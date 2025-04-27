@@ -632,27 +632,27 @@ impl Linker {
             relocation::RelocationType::Aarch64AdrPrelLo21 => {
                 let symbol_index = reloc.info.symbol_index as usize;
                 if symbol_index >= self.objects[obj_idx].symbols.len() {
-                    return Err(format!("シンボルインデックスが範囲外: {}", symbol_index));
+                    return Err(format!("Symbol index out of range: {}", symbol_index));
                 }
 
                 let symbol_name = &self.objects[obj_idx].symbols[symbol_index].name;
 
                 let resolved_symbol = resolved_symbols
                     .get(symbol_name)
-                    .ok_or_else(|| format!("シンボルが解決されていません: {}", symbol_name))?;
+                    .ok_or_else(|| format!("Symbol is not resolved: {}", symbol_name))?;
 
                 if !resolved_symbol.is_defined {
-                    return Err(format!("未定義シンボルへの再配置: {}", symbol_name));
+                    return Err(format!("Relocation to undefined symbol: {}", symbol_name));
                 }
 
                 let text_section_idx = section_indices
                     .get(".text")
-                    .ok_or_else(|| "再配置対象セクションが見つかりません: .text".to_string())?;
+                    .ok_or_else(|| "Relocation target section not found: .text".to_string())?;
 
                 let target_section = &mut output_sections[*text_section_idx];
 
                 if reloc.offset as usize >= target_section.data.len() {
-                    return Err(format!("再配置オフセットが範囲外: {}", reloc.offset));
+                    return Err(format!("Relocation offset out of range: {}", reloc.offset));
                 }
 
                 let instruction_addr = target_section.addr + reloc.offset;
@@ -664,12 +664,8 @@ impl Linker {
                     ((symbol_addr as i64) - (instruction_addr as i64) + reloc.addend) as i32;
 
                 let pos = reloc.offset as usize;
-                let instruction = u32::from_le_bytes([
-                    target_section.data[pos],
-                    target_section.data[pos + 1],
-                    target_section.data[pos + 2],
-                    target_section.data[pos + 3],
-                ]);
+                let instruction =
+                    u32::from_le_bytes(target_section.data[pos..pos + 4].try_into().unwrap());
 
                 // Keeps opcode and register portion of the ADR instruction
                 // ADR instruction format: 0bxxx10000 iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
@@ -684,11 +680,8 @@ impl Linker {
 
                 let new_instruction = opcode_rd | immlo | immhi;
 
-                let instruction_bytes = new_instruction.to_le_bytes();
-                target_section.data[pos] = instruction_bytes[0];
-                target_section.data[pos + 1] = instruction_bytes[1];
-                target_section.data[pos + 2] = instruction_bytes[2];
-                target_section.data[pos + 3] = instruction_bytes[3];
+                target_section.data[pos..pos + 4]
+                    .copy_from_slice(new_instruction.to_le_bytes().as_slice());
             }
         }
 
