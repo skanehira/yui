@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1745735911755,
+  "lastUpdate": 1745766548525,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -503,6 +503,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1139.22,
             "range": "± 10.94",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "e7f783ffe5f7c9f7625f7bd7178273b3f077cce2",
+          "message": "feat(linker): translate error messages to English\n\nTranslated all Japanese error messages in `linker.rs` to English for\nbetter readability and consistency across the codebase. This improves\nmaintainability and accessibility for non-Japanese-speaking developers.",
+          "timestamp": "2025-04-28T00:07:52+09:00",
+          "tree_id": "f2fe27076b7d2627366223bcf471caf34e10860e",
+          "url": "https://github.com/skanehira/yui/commit/e7f783ffe5f7c9f7625f7bd7178273b3f077cce2"
+        },
+        "date": 1745766547666,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 94.09,
+            "range": "± 1.27",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1126.35,
+            "range": "± 16.13",
             "unit": "ns/iter"
           }
         ]
