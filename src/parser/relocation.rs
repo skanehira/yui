@@ -41,7 +41,7 @@ fn parse_info(raw: &[u8]) -> ParseResult<Info> {
     map_res(le_u64, Info::try_from).parse(raw)
 }
 
-pub fn parse<'a>(section_headers: &'a [section::Header]) -> ParseResult<'a, Vec<RelocationAddend>> {
+pub fn parse(section_headers: &[section::Header]) -> ParseResult<Vec<RelocationAddend>> {
     let Some(header) = section_headers
         .iter()
         .find(|&s| s.r#type == section::SectionType::Rela)
@@ -67,7 +67,7 @@ pub fn parse<'a>(section_headers: &'a [section::Header]) -> ParseResult<'a, Vec<
         },
         entry_count,
     )
-    .parse(header.data)?;
+    .parse(header.section_raw_data.as_ref())?;
 
     Ok((rest, relocations))
 }

@@ -1,4 +1,5 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u32)]
 pub enum SectionType {
     Null = 0,                   // Section header table entry unused
     ProgBits = 1,               // Program data
@@ -39,18 +40,75 @@ pub enum SectionFlag {
     Compressed = 1 << 11, // Section with compressed data
 }
 
+/// Represents the header of an ELF section.
+///
+/// This structure contains metadata about a section in an ELF file, including its name,
+/// type, flags, memory address, file offset, size, and other attributes.
+///
+/// # Example: Relationship Between Section Header and .text Section
+///
+/// ```text
+/// ELF File Layout:
+/// +-------------------+
+/// | ELF Header        |
+/// +-------------------+
+/// | Section Header 1  |--> Describes .text section
+/// +-------------------+
+/// | Section Header 2  |
+/// +-------------------+
+/// | Section Header 3  |
+/// +-------------------+
+/// | ...               |
+/// +-------------------+
+/// | .text Section     |--> Contains executable code
+/// +-------------------+
+/// | ...               |
+/// +-------------------+
+///
+/// Section Header 1 (for .text):
+/// +-------------------+
+/// | Name Index: 1     |--> Points to ".text" in the string table
+/// +-------------------+
+/// | Type: PROGBITS    |--> Indicates this section contains program code
+/// +-------------------+
+/// | Flags: EXEC       |--> Executable section
+/// +-------------------+
+/// | Address: 0x1000   |--> Virtual memory address during execution
+/// +-------------------+
+/// | Offset: 0x200     |--> Offset in the ELF file where .text starts
+/// +-------------------+
+/// | Size: 0x300       |--> Size of the .text section in bytes
+/// +-------------------+
+///
+/// .text Section:
+/// +-------------------+
+/// | Machine Code      |--> Raw binary instructions for execution
+/// +-------------------+
+/// ```
 #[derive(Debug, PartialEq, Eq)]
-pub struct Header<'a> {
-    pub name_idx: u32,           // Section name (string tbl index)
-    pub name: String,            // Section name
-    pub r#type: SectionType,     // Section type
-    pub flags: Vec<SectionFlag>, // Section flags
-    pub addr: u64,               // Section virtual addr at execution
-    pub offset: u64,             // Section file offset
-    pub size: u64,               // Section size in bytes
-    pub link: u32,               // Link to another section
-    pub info: u32,               // Additional section information
-    pub addralign: u64,          // Section alignment
-    pub entsize: u64,            // Entry size if section holds table
-    pub data: &'a [u8],
+pub struct Header {
+    /// Index of the section name in the string table.
+    pub name_idx: u32,
+    /// Name of the section.
+    pub name: String,
+    /// Type of the section.
+    pub r#type: SectionType,
+    /// Flags associated with the section.
+    pub flags: Vec<SectionFlag>,
+    /// Virtual memory address of the section during execution.
+    pub addr: u64,
+    /// Offset of the section in the ELF file.
+    pub offset: u64,
+    /// Size of the section in bytes.
+    pub size: u64,
+    /// Index of a related section, if applicable.
+    pub link: u32,
+    /// Additional information about the section.
+    pub info: u32,
+    /// Alignment of the section in memory.
+    pub addralign: u64,
+    /// Size of each entry in the section, if it holds a table.
+    pub entsize: u64,
+    /// Raw data contained in the section.
+    pub section_raw_data: Vec<u8>,
 }

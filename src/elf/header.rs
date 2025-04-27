@@ -1,4 +1,5 @@
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Class {
     #[default]
     None = 0,
@@ -7,7 +8,8 @@ pub enum Class {
     Num = 3,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Data {
     #[default]
     None = 0, // unknown
@@ -16,7 +18,8 @@ pub enum Data {
     Num = 3,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum IdentVersion {
     #[default]
     None = 0,
@@ -24,7 +27,8 @@ pub enum IdentVersion {
     Num = 2,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum OSABI {
     #[default]
     SystemV = 0, // or none
@@ -52,22 +56,39 @@ pub struct Ident {
     pub abi_version: u8,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+/// Represents the type of an ELF file.
+///
+/// This enum defines various types of ELF files, such as relocatable files,
+/// executable files, shared object files, and core files. It also includes
+/// ranges for OS-specific and processor-specific types.
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
 pub enum Type {
+    /// No file type.
     #[default]
-    None = 0, // No file type
-    Rel = 1,         // Relocatable file
-    Exec = 2,        // Executable file
-    Dyn = 3,         // Shared object file
-    Core = 4,        // Core file
-    Num = 5,         // Number of defined types
-    Loos = 0xfe00,   // OS-specific range start
-    Hios = 0xfeff,   // OS-specific range end
-    Loproc = 0xff00, // Processor-specific range start
-    Hiproc = 0xffff, // Processor-specific range end
+    None = 0,
+    /// Relocatable file.
+    Rel = 1,
+    /// Executable file.
+    Exec = 2,
+    /// Shared object file.
+    Dyn = 3,
+    /// Core file.
+    Core = 4,
+    /// Number of defined types.
+    Num = 5,
+    /// OS-specific range start.
+    Loos = 0xfe00,
+    /// OS-specific range end.
+    Hios = 0xfeff,
+    /// Processor-specific range start.
+    Loproc = 0xff00,
+    /// Processor-specific range end.
+    Hiproc = 0xffff,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
 pub enum Machine {
     #[default]
     None = 0,
@@ -78,7 +99,8 @@ pub enum Machine {
     Num = 253,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u32)]
 pub enum Version {
     #[default]
     None = 0,
@@ -86,20 +108,38 @@ pub enum Version {
     Num = 2,
 }
 
+/// Represents the ELF (Executable and Linkable Format) file header.
+///
+/// The ELF header contains metadata about the ELF file, such as its type, architecture,
+/// entry point, and offsets to other important structures like the program and section headers.
 #[derive(Default, Debug, PartialEq, Eq)]
 pub struct Header {
-    pub ident: Ident,     // Magic number and other info
-    pub r#type: Type,     // Object file type
-    pub machine: Machine, // Architecture
-    pub version: Version, // Object file version
-    pub entry: u64,       // Entry point virtual address
-    pub phoff: u64,       // Program header table file offset
-    pub shoff: u64,       // Section header table file offset
-    pub flags: u32,       // Processor-specific flags
-    pub ehsize: u16,      // ELF header size in bytes
-    pub phentsize: u16,   // Program header table entry size
-    pub phnum: u16,       // Program header table entry count
-    pub shentsize: u16,   // Section header table entry size
-    pub shnum: u16,       // Section header table entry count
-    pub shstrndx: u16,    // Section header string table index
+    /// Identification information, including the magic number and file class.
+    pub ident: Ident,
+    /// The type of the ELF file (e.g., relocatable, executable, shared object).
+    pub r#type: Type,
+    /// The target architecture for the ELF file (e.g., x86, ARM).
+    pub machine: Machine,
+    /// The version of the ELF file format.
+    pub version: Version,
+    /// The virtual address of the entry point for the program.
+    pub entry: u64,
+    /// The file offset to the program header table.
+    pub phoff: u64,
+    /// The file offset to the section header table.
+    pub shoff: u64,
+    /// Processor-specific flags.
+    pub flags: u32,
+    /// The size of the ELF header in bytes.
+    pub ehsize: u16,
+    /// The size of each entry in the program header table.
+    pub phentsize: u16,
+    /// The number of entries in the program header table.
+    pub phnum: u16,
+    /// The size of each entry in the section header table.
+    pub shentsize: u16,
+    /// The number of entries in the section header table.
+    pub shnum: u16,
+    /// The index of the section header string table.
+    pub shstrndx: u16,
 }

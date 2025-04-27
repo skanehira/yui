@@ -1,4 +1,5 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Type {
     NoType = 0,  // Symbol type is unspecified
     Object = 1,  // Symbol is a data object
@@ -14,7 +15,8 @@ pub enum Type {
     Hiproc = 15, // End of processor-specific
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum Binding {
     Local = 0,   // Local symbol
     Global = 1,  // Global symbol
@@ -37,6 +39,21 @@ pub enum Visibility {
     Internal = 1,  // Processor-specific hidden class
     Hidden = 2,    // Sym unavailable in other modules
     Protected = 3, // Not preemptible, not exported
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
+pub enum SymbolIndex {
+    Undefined = 0,
+    Abs = 0xfff1,
+    Common = 0xfff2,
+    // TODO
+}
+
+impl PartialEq<u16> for SymbolIndex {
+    fn eq(&self, other: &u16) -> bool {
+        (*self as u16) == *other
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

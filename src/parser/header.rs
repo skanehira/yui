@@ -119,19 +119,19 @@ impl TryFrom<u32> for Version {
 }
 
 fn parse_elf_class(raw: &[u8]) -> ParseResult<Class> {
-    map_res(le_u8, |b: u8| Class::try_from(b)).parse(raw)
+    map_res(le_u8, Class::try_from).parse(raw)
 }
 
 fn parse_elf_data(raw: &[u8]) -> ParseResult<Data> {
-    map_res(le_u8, |b: u8| Data::try_from(b)).parse(raw)
+    map_res(le_u8, Data::try_from).parse(raw)
 }
 
 fn parse_elf_ident_version(raw: &[u8]) -> ParseResult<IdentVersion> {
-    map_res(le_u8, |b: u8| IdentVersion::try_from(b)).parse(raw)
+    map_res(le_u8, IdentVersion::try_from).parse(raw)
 }
 
 fn parse_elf_osabi(raw: &[u8]) -> ParseResult<OSABI> {
-    map_res(le_u8, |b: u8| OSABI::try_from(b)).parse(raw)
+    map_res(le_u8, OSABI::try_from).parse(raw)
 }
 
 fn parse_ident(raw: &[u8]) -> ParseResult<Ident> {
@@ -155,15 +155,15 @@ fn parse_ident(raw: &[u8]) -> ParseResult<Ident> {
 }
 
 fn parse_type(raw: &[u8]) -> ParseResult<Type> {
-    map_res(le_u16, |b: u16| Type::try_from(b)).parse(raw)
+    map_res(le_u16, Type::try_from).parse(raw)
 }
 
 fn parse_machine(raw: &[u8]) -> ParseResult<Machine> {
-    map_res(le_u16, |b: u16| Machine::try_from(b)).parse(raw)
+    map_res(le_u16, Machine::try_from).parse(raw)
 }
 
 fn parse_version(raw: &[u8]) -> ParseResult<Version> {
-    map_res(le_u32, |b: u32| Version::try_from(b)).parse(raw)
+    map_res(le_u32, Version::try_from).parse(raw)
 }
 
 fn parse_magic_number(raw: &[u8]) -> IResult<&[u8], (), ParseError> {
@@ -172,12 +172,12 @@ fn parse_magic_number(raw: &[u8]) -> IResult<&[u8], (), ParseError> {
     }
     if raw[..4] != ELF_MAGIC_NUMBER {
         let input: [u8; 4] = raw[..4].try_into().unwrap();
-        bail_nom_error!(ParseError::FileTypeNotElf(input));
+        bail_nom_error!(ParseError::FileTypeNotELF(input));
     }
     Ok((&raw[4..], ()))
 }
 
-pub fn parse(raw: &[u8]) -> IResult<&[u8], Header, ParseError> {
+pub fn parse(raw: &[u8]) -> ParseResult<Header> {
     if raw.len() < ELF_IDENT_HEADER_SIZE {
         bail_nom_error!(ParseError::InvalidHeaderSize(raw.len() as u8));
     }
@@ -244,7 +244,7 @@ mod tests {
         let err = parse(input).unwrap_err();
         assert_eq!(
             err,
-            nom::Err::Error(ParseError::FileTypeNotElf([0, 0, 0, 0]))
+            nom::Err::Error(ParseError::FileTypeNotELF([0, 0, 0, 0]))
         );
     }
 

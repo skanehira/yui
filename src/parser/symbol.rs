@@ -42,7 +42,7 @@ impl TryFrom<u8> for Info {
         };
 
         // low 4 bites: Type
-        // 0b00000001
+        // 0b01000001
         // 0b00001111
         // ----------
         // 0b00000001
@@ -92,7 +92,7 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
             let (rest, value) = le_u64(rest)?;
             let (rest, size) = le_u64(rest)?;
 
-            let name = helper::get_string_by_offset(string_table, name_idx as usize)?.1;
+            let name = helper::get_string_by_offset(string_table, name_idx as usize);
             let symbol = Symbol {
                 name,
                 info,
@@ -106,7 +106,7 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
         },
         entry_count,
     )
-    .parse(symbol_header.data)?;
+    .parse(symbol_header.section_raw_data.as_ref())?;
 
     Ok((rest, symbols))
 }

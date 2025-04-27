@@ -73,6 +73,24 @@ fn parse_flags(raw: &[u8]) -> ParseResult<Vec<SectionFlag>> {
     .parse(raw)
 }
 
+/// Parses the section headers from the raw ELF file data.
+///
+/// # Arguments
+///
+/// * `raw` - A byte slice containing the raw ELF file data.
+/// * `shoff` - The offset in the file where the section header table begins.
+/// * `shstrndx` - The index of the section header string table in the section header table.
+/// * `shnum` - The number of section headers in the section header table.
+///
+/// # Returns
+///
+/// A `ParseResult` containing a vector of parsed `Header` structures or a `ParseError` if parsing fails.
+///
+/// # Notes
+///
+/// If `shnum` is 0, the function returns an empty vector of headers. The function uses a parser combinator
+/// to iterate through the section headers and extract their fields. After parsing, it resolves the section
+/// names using the section header string table.
 pub fn parse_header(
     raw: &[u8],
     shoff: usize,
@@ -95,11 +113,11 @@ pub fn parse_header(
             let (rest, info) = le_u32(rest)?;
             let (rest, addralign) = le_u64(rest)?;
             let (rest, entsize) = le_u64(rest)?;
-            let data = &raw[offset as usize..(offset + size) as usize];
+            let data = raw[offset as usize..(offset + size) as usize].to_vec();
 
             let header = Header {
                 name_idx,
-                name: "".into(),
+                name: "".into(), // to be filled later
                 r#type,
                 flags,
                 addr,
@@ -109,7 +127,7 @@ pub fn parse_header(
                 info,
                 addralign,
                 entsize,
-                data,
+                section_raw_data: data,
             };
 
             Ok((rest, header))
@@ -117,12 +135,12 @@ pub fn parse_header(
         shnum,
     )
     .parse(&raw[shoff..])
-    .and_then(|(rest, mut headers)| {
+    .map(|(rest, mut headers)| {
         let string_table = &raw[headers[shstrndx].offset as usize..];
         for header in headers.iter_mut() {
-            header.name = helper::get_string_by_offset(string_table, header.name_idx as usize)?.1;
+            header.name = helper::get_string_by_offset(string_table, header.name_idx as usize);
         }
-        Ok((rest, headers))
+        (rest, headers)
     })
 }
 
