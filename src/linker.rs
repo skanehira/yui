@@ -13,6 +13,8 @@ use crate::elf::symbol::SymbolIndex;
 use crate::elf::{header, program_header, relocation, section, segument};
 use crate::parser;
 
+type Error = Box<dyn std::error::Error>;
+
 #[derive(Debug, Default)]
 pub struct Linker {
     objects: Vec<ELF>,
@@ -25,7 +27,7 @@ impl Linker {
         }
     }
 
-    pub fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Box<dyn std::error::Error>> {
+    fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Error> {
         for path in paths {
             let obj = fs::read(path)?;
             let elf = parser::parse_elf(&obj)?.1;
@@ -35,52 +37,46 @@ impl Linker {
         Ok(())
     }
 
-    pub fn link_to_file(
-        &mut self,
-        output_path: &Path,
-        input_paths: &[&Path],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn link_to_file(&mut self, output_path: &Path, input_paths: &[&Path]) -> Result<(), Error> {
         self.add_objects(input_paths)?;
         let mut resolved_symbols = self.resolve_symbols()?;
-        let output_sections = self.layout_sections(&mut resolved_symbols)?;
+        let (output_sections, section_name_offsets) =
+            self.layout_sections(&mut resolved_symbols)?;
         let mut file = fs::OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
             .mode(0o655) // rw-r-xr-x
             .open(output_path)?;
-        self.write_executable(&mut file, resolved_symbols, output_sections)
+        self.write_executable(
+            &mut file,
+            resolved_symbols,
+            output_sections,
+            section_name_offsets,
+        )
     }
 
-    pub fn write_executable<W: std::io::Write + std::io::Seek>(
+    fn make_symbol_section(
         &self,
-        writer: &mut W,
         resolved_symbols: HashMap<String, output::ResolvedSymbol>,
-        output_sections: Vec<output::Section>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> (output::Section, output::Section) {
         // symbol string table
         let mut strtab: Vec<u8> = Vec::new();
-        let mut symbol_name_offsets: HashMap<String, usize> = HashMap::new();
-
-        for name in resolved_symbols.keys() {
-            if !name.is_empty() {
-                let offset = strtab.len();
-                symbol_name_offsets.insert(name.clone(), offset);
-                strtab.extend_from_slice(name.as_bytes());
-                strtab.push(0);
-            }
-        }
-
         // symbol table
         let mut symtab: Vec<u8> = Vec::new();
 
         for (name, symbol) in resolved_symbols.iter() {
-            let name_offset = *symbol_name_offsets.get(name).unwrap_or(&0);
+            if name.is_empty() {
+                continue;
+            }
+            strtab.extend_from_slice(name.as_bytes());
+            strtab.push(0);
+
             let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
 
             self.write_symbol_entry(
                 &mut symtab,
-                name_offset as u32,
+                strtab.len() as u32,
                 symbol.value,
                 symbol.size,
                 st_info,
@@ -97,7 +93,7 @@ impl Linker {
             offset: align(0x3000, 8),
             size: strtab.len() as u64,
             data: strtab,
-            align: 1,
+            align: 8,
         };
 
         let symtab_section = output::Section {
@@ -111,44 +107,17 @@ impl Linker {
             align: 8,
         };
 
-        // section string table
-        let mut shstrtab_data: Vec<u8> = Vec::new();
-        let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
+        (symtab_section, strtab_section)
+    }
 
-        for section in output_sections.iter() {
-            let offset = shstrtab_data.len();
-            section_name_offsets.insert(section.name.clone(), offset);
-            shstrtab_data.extend_from_slice(section.name.as_bytes());
-            shstrtab_data.push(0);
-        }
-
-        let strtab_name_offset = shstrtab_data.len();
-        section_name_offsets.insert(".strtab".to_string(), strtab_name_offset);
-        shstrtab_data.extend_from_slice(".strtab".as_bytes());
-        shstrtab_data.push(0);
-
-        let symtab_name_offset = shstrtab_data.len();
-        section_name_offsets.insert(".symtab".to_string(), symtab_name_offset);
-        shstrtab_data.extend_from_slice(".symtab".as_bytes());
-        shstrtab_data.push(0);
-
-        let shstrtab_offset = shstrtab_data.len();
-        section_name_offsets.insert(".shstrtab".to_string(), shstrtab_offset);
-        shstrtab_data.extend_from_slice(".shstrtab".as_bytes());
-        shstrtab_data.push(0);
-
-        let shstrtab_section = output::Section {
-            name: ".shstrtab".to_string(),
-            r#type: section::SectionType::StrTab,
-            flags: vec![],
-            addr: 0,
-            offset: align(symtab_section.offset + symtab_section.size, 8),
-            size: shstrtab_data.len() as u64,
-            data: shstrtab_data,
-            align: 1,
-        };
-
-        let mut elf_header = self.create_elf_header(&output_sections);
+    fn write_executable<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+        resolved_symbols: HashMap<String, output::ResolvedSymbol>,
+        section_tables: Vec<output::Section>,
+        section_name_offsets: HashMap<String, usize>,
+    ) -> Result<(), Error> {
+        let mut elf_header = self.create_elf_header(&section_tables);
 
         let Some(output::ResolvedSymbol {
             value: entry_point, ..
@@ -158,17 +127,6 @@ impl Linker {
         };
 
         elf_header.entry = *entry_point;
-
-        let section_tables = [
-            // .text, .data, .bss, etc...
-            output_sections.as_slice(),
-            &[
-                strtab_section.clone(),
-                symtab_section.clone(),
-                shstrtab_section.clone(),
-            ],
-        ]
-        .concat();
 
         let section_data_end = section_tables
             .iter()
@@ -187,7 +145,7 @@ impl Linker {
             .unwrap_or(0);
         elf_header.shstrndx = (shstrtab_idx + 1) as u16;
 
-        let program_headers = self.create_program_headers(&output_sections);
+        let program_headers = self.create_program_headers(&section_tables);
 
         self.write_elf_header(writer, &elf_header)?;
 
@@ -197,7 +155,7 @@ impl Linker {
 
         writer.seek(SeekFrom::Start(sh_offset))?;
 
-        self.write_section_header(writer, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
+        self.write_section_header(writer, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
 
         for section in section_tables.iter() {
             let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
@@ -229,7 +187,6 @@ impl Linker {
             self.write_section_header(
                 writer,
                 name_offset as u32,
-                &section.name,
                 sh_type,
                 sh_flags,
                 section.addr,
@@ -246,7 +203,7 @@ impl Linker {
     }
 
     fn create_elf_header(&self, output_sections: &[output::Section]) -> header::Header {
-        let mut elf_header = header::Header {
+        header::Header {
             ident: header::Ident {
                 class: header::Class::Bit64,
                 data: header::Data::Lsb, // Little Endian
@@ -263,20 +220,30 @@ impl Linker {
             flags: 0,
             ehsize: 64,
             phentsize: 56,
-            phnum: 0,
+            phnum: self.count_program_headers(output_sections),
             shentsize: 0,
             shnum: 0,
             shstrndx: 0,
-        };
-
-        let ph_count = self.count_program_headers(output_sections);
-        elf_header.phnum = ph_count as u16;
-
-        elf_header
+        }
     }
 
-    fn count_program_headers(&self, _output_sections: &[output::Section]) -> usize {
-        2
+    fn count_program_headers(&self, output_sections: &[output::Section]) -> u16 {
+        let sym_map = HashMap::<&str, ()>::from_iter([
+            (".text", ()),
+            (".data", ()),
+            (".bss", ()),
+            (".rodata", ()),
+            (".got", ()),
+            (".plt", ()),
+            (".dynamic", ()),
+            (".interp", ()),
+            (".note", ()),
+        ]);
+        let x: Vec<_> = output_sections
+            .iter()
+            .filter(|s| sym_map.contains_key(s.name.as_str()))
+            .collect();
+        x.len() as u16
     }
 
     fn create_program_headers(
@@ -285,32 +252,38 @@ impl Linker {
     ) -> Vec<program_header::ProgramHeader> {
         let mut program_headers = Vec::new();
 
-        if let Some(text_section) = output_sections.iter().find(|s| s.name == ".text") {
-            let text_ph = program_header::ProgramHeader {
-                r#type: segument::Type::Load,
-                flags: vec![segument::Flag::Readable, segument::Flag::Executable],
-                offset: text_section.offset,
-                vaddr: text_section.addr,
-                paddr: text_section.addr,
-                filesz: text_section.size,
-                memsz: text_section.size,
-                align: text_section.align,
-            };
-            program_headers.push(text_ph);
-        }
-
-        if let Some(data_section) = output_sections.iter().find(|s| s.name == ".data") {
-            let data_ph = program_header::ProgramHeader {
-                r#type: segument::Type::Load,
-                flags: vec![segument::Flag::Readable, segument::Flag::Writable],
-                offset: data_section.offset,
-                vaddr: data_section.addr,
-                paddr: data_section.addr,
-                filesz: data_section.size,
-                memsz: data_section.size,
-                align: data_section.align,
-            };
-            program_headers.push(data_ph);
+        for s in output_sections.iter() {
+            match s.name.as_str() {
+                ".text" => {
+                    let text_ph = program_header::ProgramHeader {
+                        r#type: segument::Type::Load,
+                        flags: vec![segument::Flag::Readable, segument::Flag::Executable],
+                        offset: s.offset,
+                        vaddr: s.addr,
+                        paddr: s.addr,
+                        filesz: s.size,
+                        memsz: s.size,
+                        align: s.align,
+                    };
+                    program_headers.push(text_ph);
+                }
+                ".data" => {
+                    let data_ph = program_header::ProgramHeader {
+                        r#type: segument::Type::Load,
+                        flags: vec![segument::Flag::Readable, segument::Flag::Writable],
+                        offset: s.offset,
+                        vaddr: s.addr,
+                        paddr: s.addr,
+                        filesz: s.size,
+                        memsz: s.size,
+                        align: s.align,
+                    };
+                    program_headers.push(data_ph);
+                }
+                _ => {
+                    // TODO
+                }
+            }
         }
 
         program_headers
@@ -323,11 +296,11 @@ impl Linker {
     ) -> io::Result<()> {
         let bytes = [
             &[0x7f, b'E', b'L', b'F'],
-            [header.ident.class as u8].as_slice(),
-            [header.ident.data as u8].as_slice(),
-            [header.ident.version as u8].as_slice(),
-            [header.ident.os_abi as u8].as_slice(),
-            [header.ident.abi_version].as_slice(),
+            (header.ident.class as u8).to_le_bytes().as_slice(),
+            (header.ident.data as u8).to_le_bytes().as_slice(),
+            (header.ident.version as u8).to_le_bytes().as_slice(),
+            (header.ident.os_abi as u8).to_le_bytes().as_slice(),
+            (header.ident.abi_version).to_le_bytes().as_slice(),
             [0; 7].as_slice(),
             (header.r#type as u16).to_le_bytes().as_slice(),
             (header.machine as u16).to_le_bytes().as_slice(),
@@ -420,9 +393,7 @@ impl Linker {
         false
     }
 
-    pub fn resolve_symbols(
-        &self,
-    ) -> Result<HashMap<String, output::ResolvedSymbol>, Box<dyn std::error::Error>> {
+    pub fn resolve_symbols(&self) -> Result<HashMap<String, output::ResolvedSymbol>, Error> {
         let mut resolved_symbols: HashMap<String, output::ResolvedSymbol> = HashMap::new();
         let mut duplicate_symbols = vec![];
 
@@ -483,7 +454,7 @@ impl Linker {
     pub fn layout_sections(
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<Vec<output::Section>, Box<dyn std::error::Error>> {
+    ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
         let mut output_sections: Vec<output::Section> = Vec::new();
 
         let (text_data, text_offsets) = self.merge_sections(".text", 1);
@@ -526,7 +497,52 @@ impl Linker {
 
         self.apply_relocations(&mut output_sections, resolved_symbols)?;
 
-        Ok(output_sections)
+        let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols.clone());
+
+        let mut shstrtab: Vec<u8> = Vec::new();
+        let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
+
+        for section in output_sections.iter() {
+            section_name_offsets.insert(section.name.clone(), shstrtab.len());
+            shstrtab.extend_from_slice(section.name.as_bytes());
+            shstrtab.push(0);
+        }
+
+        section_name_offsets.insert(".strtab".to_string(), shstrtab.len());
+        shstrtab.extend_from_slice(".strtab".as_bytes());
+        shstrtab.push(0);
+
+        section_name_offsets.insert(".symtab".to_string(), shstrtab.len());
+        shstrtab.extend_from_slice(".symtab".as_bytes());
+        shstrtab.push(0);
+
+        section_name_offsets.insert(".shstrtab".to_string(), shstrtab.len());
+        shstrtab.extend_from_slice(".shstrtab".as_bytes());
+        shstrtab.push(0);
+
+        let shstrtab_section = output::Section {
+            name: ".shstrtab".to_string(),
+            r#type: section::SectionType::StrTab,
+            flags: vec![],
+            addr: 0,
+            offset: align(symtab_section.offset + symtab_section.size, 8),
+            size: shstrtab.len() as u64,
+            data: shstrtab,
+            align: 1,
+        };
+
+        let section_tables = [
+            // .text, .data, .bss, etc...
+            output_sections.as_slice(),
+            &[
+                symtab_section.clone(),
+                strtab_section.clone(),
+                shstrtab_section.clone(),
+            ],
+        ]
+        .concat();
+
+        Ok((section_tables, section_name_offsets))
     }
 
     fn merge_sections(
@@ -582,7 +598,7 @@ impl Linker {
         &self,
         output_sections: &mut [output::Section],
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Error> {
         let section_indices: HashMap<String, usize> = output_sections
             .iter()
             .enumerate()
@@ -701,7 +717,6 @@ impl Linker {
         &self,
         writer: &mut W,
         name: u32,
-        _debug_name: &str,
         sh_type: u32,
         sh_flags: u64,
         sh_addr: u64,
@@ -790,7 +805,7 @@ mod tests {
 
         let mut resolved_symbols = linker.resolve_symbols().unwrap();
 
-        let output_sections = linker.layout_sections(&mut resolved_symbols).unwrap();
+        let output_sections = linker.layout_sections(&mut resolved_symbols).unwrap().0;
 
         let mut section_iter = output_sections.iter();
         assert!(
@@ -885,7 +900,7 @@ mod tests {
         linker.add_objects(&[main_o, sub_o]).unwrap();
 
         let mut resolved_symbols = linker.resolve_symbols().unwrap();
-        let mut output_sections = linker.layout_sections(&mut resolved_symbols).unwrap();
+        let mut output_sections = linker.layout_sections(&mut resolved_symbols).unwrap().0;
         linker
             .apply_relocations(&mut output_sections, &resolved_symbols)
             .unwrap();
