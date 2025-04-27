@@ -41,6 +41,21 @@ pub enum Visibility {
     Protected = 3, // Not preemptible, not exported
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u16)]
+pub enum SymbolIndex {
+    Undefined = 0,
+    Abs = 0xfff1,
+    Common = 0xfff2,
+    // TODO
+}
+
+impl PartialEq<u16> for SymbolIndex {
+    fn eq(&self, other: &u16) -> bool {
+        (*self as u16) == *other
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Symbol {
     pub name: String,      // Symbol name

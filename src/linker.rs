@@ -4,11 +4,12 @@ pub mod output;
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Seek, SeekFrom, Write};
+use std::io::{self, SeekFrom};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use crate::elf::ELF;
+use crate::elf::symbol::SymbolIndex;
 use crate::elf::{header, program_header, relocation, section, segument};
 use crate::parser;
 
@@ -40,128 +41,114 @@ impl Linker {
         input_paths: &[&Path],
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.add_objects(input_paths)?;
-        let output_sections = self.link()?;
-        self.write_executable(output_path, &output_sections)
-    }
-
-    pub fn write_executable(
-        &self,
-        output_path: &Path,
-        output_sections: &[output::Section],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut resolved_symbols = self.resolve_symbols()?;
+        let output_sections = self.layout_sections(&mut resolved_symbols)?;
         let mut file = fs::OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
             .mode(0o655) // rw-r-xr-x
             .open(output_path)?;
+        self.write_executable(&mut file, resolved_symbols, output_sections)
+    }
 
-        // まずシンボル解決を行い、_startシンボルのアドレスを取得
-        let (mut resolved_symbols, _) = self.resolve_symbols();
-
-        // セクションレイアウトを行う（シンボルアドレスが更新される）
-        self.layout_sections(&mut resolved_symbols);
-
-        // シンボル文字列テーブル(.strtab)を作成
-        let mut strtab_data: Vec<u8> = Vec::new();
+    pub fn write_executable<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+        resolved_symbols: HashMap<String, output::ResolvedSymbol>,
+        output_sections: Vec<output::Section>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // symbol string table
+        let mut strtab: Vec<u8> = Vec::new();
         let mut symbol_name_offsets: HashMap<String, usize> = HashMap::new();
 
-        // シンボル名をテーブルに追加
         for name in resolved_symbols.keys() {
             if !name.is_empty() {
-                let offset = strtab_data.len();
+                let offset = strtab.len();
                 symbol_name_offsets.insert(name.clone(), offset);
-                strtab_data.extend_from_slice(name.as_bytes());
-                strtab_data.push(0); // NULL終端
+                strtab.extend_from_slice(name.as_bytes());
+                strtab.push(0);
             }
         }
 
-        // シンボルテーブル(.symtab)を作成
-        let mut symtab_data: Vec<u8> = Vec::new();
+        // symbol table
+        let mut symtab: Vec<u8> = Vec::new();
 
-        // 各シンボルのエントリを追加
-        for (name, symbol) in &resolved_symbols {
+        for (name, symbol) in resolved_symbols.iter() {
             let name_offset = *symbol_name_offsets.get(name).unwrap_or(&0);
             let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
 
             self.write_symbol_entry(
-                &mut symtab_data,
+                &mut symtab,
                 name_offset as u32,
                 symbol.value,
                 symbol.size,
                 st_info,
                 0, // st_other
-                symbol.section_index,
+                symbol.shndx,
             );
         }
 
-        // シンボル文字列テーブルセクションを作成
         let strtab_section = output::Section {
             name: ".strtab".to_string(),
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
             offset: align(0x3000, 8),
-            size: strtab_data.len() as u64,
-            data: strtab_data,
+            size: strtab.len() as u64,
+            data: strtab,
             align: 1,
         };
 
-        // シンボルテーブルセクションを作成
         let symtab_section = output::Section {
             name: ".symtab".to_string(),
             r#type: section::SectionType::SymTab,
             flags: vec![],
             addr: 0,
             offset: align(strtab_section.offset + strtab_section.size, 8),
-            size: symtab_data.len() as u64,
-            data: symtab_data,
+            size: symtab.len() as u64,
+            data: symtab,
             align: 8,
         };
 
-        // セクション名文字列テーブル(.shstrtab)を作成
+        // section string table
         let mut shstrtab_data: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
 
-        // セクション名をテーブルに追加
-        for section in output_sections {
+        for section in output_sections.iter() {
             let offset = shstrtab_data.len();
             section_name_offsets.insert(section.name.clone(), offset);
             shstrtab_data.extend_from_slice(section.name.as_bytes());
-            shstrtab_data.push(0); // NULL終端
+            shstrtab_data.push(0);
         }
 
-        // .strtabと.symtabも追加
         let strtab_name_offset = shstrtab_data.len();
         section_name_offsets.insert(".strtab".to_string(), strtab_name_offset);
         shstrtab_data.extend_from_slice(".strtab".as_bytes());
-        shstrtab_data.push(0); // NULL終端
+        shstrtab_data.push(0);
 
         let symtab_name_offset = shstrtab_data.len();
         section_name_offsets.insert(".symtab".to_string(), symtab_name_offset);
         shstrtab_data.extend_from_slice(".symtab".as_bytes());
-        shstrtab_data.push(0); // NULL終端
+        shstrtab_data.push(0);
 
-        // .shstrtab自身も追加
         let shstrtab_offset = shstrtab_data.len();
         section_name_offsets.insert(".shstrtab".to_string(), shstrtab_offset);
         shstrtab_data.extend_from_slice(".shstrtab".as_bytes());
-        shstrtab_data.push(0); // NULL終端
+        shstrtab_data.push(0);
 
-        // セクション名文字列テーブルセクションを作成
         let shstrtab_section = output::Section {
             name: ".shstrtab".to_string(),
             r#type: section::SectionType::StrTab,
             flags: vec![],
-            addr: 0, // メモリにロードされない
-            offset: align(symtab_section.offset + symtab_section.size, 8), // セクションデータの配置オフセット
+            addr: 0,
+            offset: align(symtab_section.offset + symtab_section.size, 8),
             size: shstrtab_data.len() as u64,
             data: shstrtab_data,
             align: 1,
         };
 
-        // ELFヘッダーを作成
-        let mut elf_header = self.create_elf_header(output_sections);
+        let mut elf_header = self.create_elf_header(&output_sections);
 
         let Some(output::ResolvedSymbol {
             value: entry_point, ..
@@ -172,10 +159,9 @@ impl Linker {
 
         elf_header.entry = *entry_point;
 
-        // セクションヘッダーテーブルの位置を計算
         let section_tables = [
-            // .text, .data, .bss などのセクション
-            output_sections,
+            // .text, .data, .bss, etc...
+            output_sections.as_slice(),
             &[
                 strtab_section.clone(),
                 symtab_section.clone(),
@@ -184,7 +170,6 @@ impl Linker {
         ]
         .concat();
 
-        // セクションヘッダーテーブルの位置を設定
         let section_data_end = section_tables
             .iter()
             .map(|s| s.offset + align(s.size, 8))
@@ -193,35 +178,27 @@ impl Linker {
 
         let sh_offset = align(section_data_end, 8);
         elf_header.shoff = sh_offset;
-        elf_header.shentsize = 64; // セクションヘッダーエントリのサイズ (64ビットELF)
-        elf_header.shnum = (section_tables.len() + 1) as u16; // NULL セクションも含める
+        elf_header.shentsize = 64;
+        elf_header.shnum = (section_tables.len() + 1) as u16; // include NULL section
 
-        // .shstrtabのインデックスを正しく設定
         let shstrtab_idx = section_tables
             .iter()
             .position(|s| s.name == ".shstrtab")
             .unwrap_or(0);
-        elf_header.shstrndx = (shstrtab_idx + 1) as u16; // NULLセクションもあるため+1
+        elf_header.shstrndx = (shstrtab_idx + 1) as u16;
 
-        // プログラムヘッダーを作成
-        let program_headers = self.create_program_headers(output_sections);
+        let program_headers = self.create_program_headers(&output_sections);
 
-        // ELFヘッダーを書き込み
-        self.write_elf_header(&mut file, &elf_header)?;
+        self.write_elf_header(writer, &elf_header)?;
 
-        // プログラムヘッダーを書き込み
-        self.write_program_headers(&mut file, &program_headers)?;
+        self.write_program_headers(writer, &program_headers)?;
 
-        // セクションデータを書き込み
-        self.write_sections(&mut file, &section_tables)?;
+        self.write_sections(writer, &section_tables)?;
 
-        // セクションヘッダーテーブルを書き込み
-        file.seek(SeekFrom::Start(sh_offset))?;
+        writer.seek(SeekFrom::Start(sh_offset))?;
 
-        // NULLセクションヘッダー
-        self.write_section_header(&mut file, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
+        self.write_section_header(writer, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
 
-        // 各セクションのヘッダーを書き込み
         for section in section_tables.iter() {
             let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
             let sh_type = section.r#type as u32;
@@ -236,49 +213,39 @@ impl Linker {
                 sh_flags |= bit;
             }
 
-            // シンボルテーブルの特別な設定
             let (sh_link, sh_info) = if section.name == ".symtab" {
-                // sh_link: 文字列テーブルのセクションインデックス
-                // sh_info: ローカルシンボルの数 + 1
                 let strtab_idx = section_tables
                     .iter()
                     .position(|s| s.name == ".strtab")
                     .unwrap_or(0)
                     + 1;
-                (strtab_idx as u32, 1) // ここではすべてグローバルシンボルと仮定
+                (strtab_idx as u32, 1)
             } else {
                 (0, 0)
             };
 
-            // セクションエントリサイズ（シンボルテーブルの場合は24）
-            let sh_entsize = if section.name == ".symtab" {
-                24 // 64ビットELFのシンボルエントリサイズ
-            } else {
-                0
-            };
+            let sh_entsize = if section.name == ".symtab" { 24 } else { 0 };
 
             self.write_section_header(
-                &mut file,
-                name_offset as u32, // セクション名の文字列テーブルでのオフセット
-                &section.name,      // デバッグ用
-                sh_type,            // セクションタイプ
-                sh_flags,           // セクションフラグ
-                section.addr,       // メモリアドレス
-                section.offset,     // ファイルオフセット
-                section.size,       // セクションサイズ
-                sh_link,            // リンク（シンボルテーブル用）
-                sh_info,            // 情報（追加情報）
-                section.align,      // アラインメント
-                sh_entsize,         // エントリサイズ
+                writer,
+                name_offset as u32,
+                &section.name,
+                sh_type,
+                sh_flags,
+                section.addr,
+                section.offset,
+                section.size,
+                sh_link,
+                sh_info,
+                section.align,
+                sh_entsize,
             )?;
         }
 
         Ok(())
     }
 
-    /// ELFヘッダーを生成
     fn create_elf_header(&self, output_sections: &[output::Section]) -> header::Header {
-        // デフォルトのヘッダー
         let mut elf_header = header::Header {
             ident: header::Ident {
                 class: header::Class::Bit64,
@@ -290,39 +257,34 @@ impl Linker {
             r#type: header::Type::Exec,
             machine: header::Machine::AArch64,
             version: header::Version::Current,
-            entry: 0x400000, // エントリポイント（_startシンボルのアドレス）
-            phoff: 64,       // プログラムヘッダーのオフセット（ELF64ヘッダーのサイズ）
-            shoff: 0,        // セクションヘッダーのオフセット（現在は使用しない）
+            entry: 0x400000,
+            phoff: 64,
+            shoff: 0,
             flags: 0,
-            ehsize: 64,    // ELF64ヘッダーのサイズ
-            phentsize: 56, // プログラムヘッダーエントリのサイズ
-            phnum: 0,      // プログラムヘッダー数（後で更新）
-            shentsize: 0,  // セクションヘッダーのサイズ（現在は使用しない）
-            shnum: 0,      // セクションヘッダー数（現在は使用しない）
-            shstrndx: 0,   // セクション名文字列テーブルのインデックス（現在は使用しない）
+            ehsize: 64,
+            phentsize: 56,
+            phnum: 0,
+            shentsize: 0,
+            shnum: 0,
+            shstrndx: 0,
         };
 
-        // プログラムヘッダーの情報を更新
         let ph_count = self.count_program_headers(output_sections);
         elf_header.phnum = ph_count as u16;
 
         elf_header
     }
 
-    /// プログラムヘッダー数をカウント
     fn count_program_headers(&self, _output_sections: &[output::Section]) -> usize {
-        // 現在はテキストセクションとデータセクションの2つ
         2
     }
 
-    /// プログラムヘッダーを生成
     fn create_program_headers(
         &self,
         output_sections: &[output::Section],
     ) -> Vec<program_header::ProgramHeader> {
         let mut program_headers = Vec::new();
 
-        // テキストセクション（実行可能セクション）
         if let Some(text_section) = output_sections.iter().find(|s| s.name == ".text") {
             let text_ph = program_header::ProgramHeader {
                 r#type: segument::Type::Load,
@@ -337,13 +299,12 @@ impl Linker {
             program_headers.push(text_ph);
         }
 
-        // データセクション（読み書き可能セクション）
         if let Some(data_section) = output_sections.iter().find(|s| s.name == ".data") {
             let data_ph = program_header::ProgramHeader {
                 r#type: segument::Type::Load,
                 flags: vec![segument::Flag::Readable, segument::Flag::Writable],
                 offset: data_section.offset,
-                vaddr: data_section.addr, // 既に適切に計算されているはずなので、そのまま使用
+                vaddr: data_section.addr,
                 paddr: data_section.addr,
                 filesz: data_section.size,
                 memsz: data_section.size,
@@ -355,8 +316,11 @@ impl Linker {
         program_headers
     }
 
-    /// ELFヘッダーをファイルに書き込む
-    fn write_elf_header(&self, file: &mut fs::File, header: &header::Header) -> io::Result<()> {
+    fn write_elf_header<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+        header: &header::Header,
+    ) -> io::Result<()> {
         let bytes = [
             &[0x7f, b'E', b'L', b'F'],
             [header.ident.class as u8].as_slice(),
@@ -381,17 +345,15 @@ impl Linker {
         ]
         .concat();
 
-        file.write_all(&bytes)
+        writer.write_all(&bytes)
     }
 
-    /// プログラムヘッダーをファイルに書き込む
-    fn write_program_headers(
+    fn write_program_headers<W: std::io::Write>(
         &self,
-        file: &mut fs::File,
+        writer: &mut W,
         headers: &[program_header::ProgramHeader],
     ) -> io::Result<()> {
         for ph in headers {
-            // フラグ
             let mut flags: u32 = 0;
             for flag in &ph.flags {
                 let bit = match flag {
@@ -399,7 +361,6 @@ impl Linker {
                     segument::Flag::Writable => 0x2,
                     segument::Flag::Readable => 0x4,
                     segument::Flag::MaskOS | segument::Flag::MaskProc => {
-                        // これらはマスク値なので、通常は直接使用しない
                         continue;
                     }
                 };
@@ -418,53 +379,25 @@ impl Linker {
             ]
             .concat();
 
-            file.write_all(bytes)?
+            writer.write_all(bytes)?
         }
 
         Ok(())
     }
 
-    /// セクションデータをファイルに書き込む
-    fn write_sections(&self, file: &mut fs::File, sections: &[output::Section]) -> io::Result<()> {
+    fn write_sections<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+        sections: &[output::Section],
+    ) -> io::Result<()> {
         for section in sections {
-            // ファイルポインタをセクションのオフセット位置に移動
-            file.seek(SeekFrom::Start(section.offset))?;
-
-            // セクションデータを書き込み
-            file.write_all(&section.data)?;
+            writer.seek(SeekFrom::Start(section.offset))?;
+            writer.write_all(&section.data)?;
         }
 
         Ok(())
     }
 
-    /// リンク処理全体を実行する
-    pub fn link(&self) -> Result<Vec<output::Section>, String> {
-        // 1. シンボル解決を実行
-        let (mut resolved_symbols, unresolved_symbols) = self.resolve_symbols();
-
-        // 未解決シンボルがあればエラー
-        if !unresolved_symbols.is_empty() {
-            return Err(format!(
-                "There are unresolved symbols: {:?}",
-                unresolved_symbols
-            ));
-        }
-
-        // 2. セクション配置を実行
-        let mut output_sections = self.layout_sections(&mut resolved_symbols);
-
-        // 3. 再配置処理を適用
-        self.apply_relocations(&mut output_sections, &resolved_symbols)?;
-
-        Ok(output_sections)
-    }
-
-    /// 読み込まれたオブジェクトファイルの数を返す
-    pub fn object_count(&self) -> usize {
-        self.objects.len()
-    }
-
-    /// 指定されたシンボルがオブジェクトファイル内に存在するかチェック
     pub fn has_symbol(&self, name: &str) -> bool {
         for obj in &self.objects {
             for symbol in &obj.symbols {
@@ -476,12 +409,10 @@ impl Linker {
         false
     }
 
-    /// 指定されたシンボルが未定義シンボルとして参照されているかチェック
     pub fn has_undefined_symbol(&self, name: &str) -> bool {
         for obj in &self.objects {
             for symbol in &obj.symbols {
-                if symbol.name == name && symbol.shndx == 0 {
-                    // shndx == 0 は SHN_UNDEF を意味し、未定義シンボル
+                if symbol.name == name && SymbolIndex::Undefined == symbol.shndx {
                     return true;
                 }
             }
@@ -489,16 +420,14 @@ impl Linker {
         false
     }
 
-    /// シンボル解決を行い、解決されたシンボルと未解決シンボルを返す
-    pub fn resolve_symbols(&self) -> (HashMap<String, output::ResolvedSymbol>, Vec<String>) {
+    pub fn resolve_symbols(
+        &self,
+    ) -> Result<HashMap<String, output::ResolvedSymbol>, Box<dyn std::error::Error>> {
         let mut resolved_symbols: HashMap<String, output::ResolvedSymbol> = HashMap::new();
+        let mut duplicate_symbols = vec![];
 
-        // 各オブジェクトファイルのシンボルを処理
         for (obj_idx, obj) in self.objects.iter().enumerate() {
             for symbol in &obj.symbols {
-                let is_defined = symbol.shndx != 0; // 0 = SHN_UNDEF (未定義シンボル)
-
-                // シンボル名が空の場合はスキップ（NULL シンボル）
                 if symbol.name.is_empty() {
                     continue;
                 }
@@ -509,85 +438,84 @@ impl Linker {
                     size: symbol.size,
                     r#type: symbol.info.r#type,
                     binding: symbol.info.binding,
-                    section_index: symbol.shndx,
+                    shndx: symbol.shndx,
                     object_index: obj_idx,
-                    is_defined,
+                    is_defined: SymbolIndex::Undefined != symbol.shndx,
                 };
 
-                // 既存のシンボルとマージするかどうかを決定
                 if let Some(existing) = resolved_symbols.get(&symbol.name) {
-                    // 両方定義済みの場合、バインディングの強さでどちらを使うか決める
-                    if is_defined && existing.is_defined {
+                    if new_symbol.is_defined && existing.is_defined {
                         if new_symbol.is_stronger_than(existing) {
                             resolved_symbols.insert(symbol.name.clone(), new_symbol);
+                        } else {
+                            duplicate_symbols.push(symbol.name.clone());
                         }
-                        // 既存のシンボルの方が強いか同等なら、それを保持
-                    }
-                    // 現在が定義済みで既存が未定義なら、今回の定義で上書き
-                    else if is_defined && !existing.is_defined {
+                    } else if new_symbol.is_defined && !existing.is_defined {
                         resolved_symbols.insert(symbol.name.clone(), new_symbol);
                     }
-                    // それ以外の場合は既存を保持
                 } else {
-                    // まだ見たことのないシンボルは追加
                     resolved_symbols.insert(symbol.name.clone(), new_symbol);
                 }
             }
         }
 
-        // 未解決シンボルをチェック
-        let unresolved_symbols: Vec<String> = resolved_symbols
+        if !duplicate_symbols.is_empty() {
+            return Err(format!("Duplicate symbols: {:?}", duplicate_symbols).into());
+        }
+
+        let unresolved_symbols: Vec<_> = resolved_symbols
             .iter()
-            .filter(|(_, symbol)| !symbol.is_defined)
-            .map(|(name, _)| name.clone())
+            .filter_map(|(_, symbol)| {
+                if symbol.is_defined {
+                    return None;
+                }
+                Some(symbol.name.clone())
+            })
             .collect();
 
-        (resolved_symbols, unresolved_symbols)
+        if !unresolved_symbols.is_empty() {
+            return Err(format!("There are unresolved symbols: {:?}", unresolved_symbols).into());
+        }
+
+        Ok(resolved_symbols)
     }
 
-    /// セクションの配置を行い、出力セクションのリストを返す
     pub fn layout_sections(
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-    ) -> Vec<output::Section> {
+    ) -> Result<Vec<output::Section>, Box<dyn std::error::Error>> {
         let mut output_sections: Vec<output::Section> = Vec::new();
 
-        // .textセクションと.dataセクションを統合し、オフセット情報を取得
         let (text_data, text_offsets) = self.merge_sections(".text", 1);
         let (data_data, data_offsets) = self.merge_sections(".data", 2);
 
-        // 基本的なメモリレイアウトを決定
-        // まず.textセクションから設定
-        let base_addr = 0x400000; // 実行可能ファイルの典型的な開始アドレス
+        let base_addr = 0x400000;
         let text_section = output::Section {
             name: ".text".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
-            addr: base_addr + 0x1000, // 修正: テキストセクションの開始アドレスを0x401000に変更
-            offset: 0x1000,           // ヘッダーの後のオフセット
+            addr: base_addr + 0x1000,
+            offset: 0x1000,
             size: text_data.len() as u64,
             data: text_data,
-            align: 0x1000, // 一般的なページサイズ
+            align: 0x1000,
         };
 
-        // .dataセクションは.textの後に配置
-        let data_addr = align(base_addr + 0x2000, 0x1000); // 修正: 明示的に0x402000に配置
+        let data_addr = align(base_addr + 0x2000, 0x1000);
         let data_section = output::Section {
             name: ".data".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
             addr: data_addr,
-            offset: 0x2000, // 修正: 明示的に0x2000に設定
+            offset: 0x2000,
             size: data_data.len() as u64,
             data: data_data,
             align: 0x1000,
         };
 
-        // 出力セクションリストを構築
         output_sections.push(text_section);
         output_sections.push(data_section);
 
-        // シンボルのアドレスを更新
         self.update_symbol_addresses(
             resolved_symbols,
             &text_offsets,
@@ -596,11 +524,11 @@ impl Linker {
             data_addr,
         );
 
-        output_sections
+        self.apply_relocations(&mut output_sections, resolved_symbols)?;
+
+        Ok(output_sections)
     }
 
-    /// 指定された名前のセクションをすべてのオブジェクトファイルから統合し、
-    /// 元のオフセット情報と統合されたデータを返す
     fn merge_sections(
         &self,
         section_name: &str,
@@ -613,7 +541,6 @@ impl Linker {
         for (obj_idx, obj) in self.objects.iter().enumerate() {
             for section in &obj.section_headers {
                 if section.name == section_name {
-                    // このオブジェクトのセクションの開始オフセットを記録
                     offsets.insert((obj_idx, section_index), current_offset);
                     section_data.extend_from_slice(&section.section_raw_data);
                     current_offset += section.section_raw_data.len();
@@ -624,7 +551,6 @@ impl Linker {
         (section_data, offsets)
     }
 
-    /// シンボルの最終アドレスを更新する
     fn update_symbol_addresses(
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
@@ -634,54 +560,37 @@ impl Linker {
         data_base_addr: u64,
     ) {
         for symbol in resolved_symbols.values_mut() {
-            // シンボルのセクションインデックスに応じて適切なベースアドレスを選択
-            match symbol.section_index {
+            match symbol.shndx {
                 1 => {
-                    // .textセクション内のシンボル
-                    if let Some(&offset) =
-                        text_offsets.get(&(symbol.object_index, symbol.section_index))
-                    {
-                        // オブジェクトファイル内でのオフセット + 統合.textセクションでのオブジェクトのオフセット + .textセクションの開始アドレス
+                    if let Some(&offset) = text_offsets.get(&(symbol.object_index, symbol.shndx)) {
                         symbol.value = text_base_addr + (offset + symbol.value as usize) as u64;
                     }
                 }
                 2 => {
-                    // .dataセクション内のシンボル
-                    if let Some(&offset) =
-                        data_offsets.get(&(symbol.object_index, symbol.section_index))
-                    {
-                        // オブジェクトファイル内でのオフセット + 統合.dataセクションでのオブジェクトのオフセット + .dataセクションの開始アドレス
+                    if let Some(&offset) = data_offsets.get(&(symbol.object_index, symbol.shndx)) {
                         symbol.value = data_base_addr + (offset + symbol.value as usize) as u64;
                     }
                 }
                 _ => {
-                    // その他のセクション（現状は無視）
+                    // TODO
                 }
             }
         }
     }
 
-    /// 再配置（リロケーション）を適用する
-    ///
-    /// 各オブジェクトファイルの再配置エントリを処理し、
-    /// 解決されたシンボルのアドレスを使用して参照を更新する
     pub fn apply_relocations(
         &self,
         output_sections: &mut [output::Section],
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(), String> {
-        // セクション名からoutput::Sectionの位置を特定するマップ
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let section_indices: HashMap<String, usize> = output_sections
             .iter()
             .enumerate()
             .map(|(i, sec)| (sec.name.clone(), i))
             .collect();
 
-        // 各オブジェクトファイルの再配置エントリを処理
         for (obj_idx, obj) in self.objects.iter().enumerate() {
-            // 各再配置エントリに対して処理を行う
             for reloc in &obj.relocations {
-                // 再配置タイプに応じた処理
                 self.process_relocation(
                     obj_idx,
                     reloc,
@@ -695,7 +604,6 @@ impl Linker {
         Ok(())
     }
 
-    /// 個々の再配置エントリを処理する
     fn process_relocation(
         &self,
         obj_idx: usize,
@@ -704,10 +612,8 @@ impl Linker {
         section_indices: &HashMap<String, usize>,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(), String> {
-        // 再配置タイプに応じた処理
         match reloc.info.r#type {
             relocation::RelocationType::Aarch64AdrPrelLo21 => {
-                // シンボルインデックスからシンボル名を取得
                 let symbol_index = reloc.info.symbol_index as usize;
                 if symbol_index >= self.objects[obj_idx].symbols.len() {
                     return Err(format!("シンボルインデックスが範囲外: {}", symbol_index));
@@ -715,41 +621,32 @@ impl Linker {
 
                 let symbol_name = &self.objects[obj_idx].symbols[symbol_index].name;
 
-                // 解決されたシンボルを取得
                 let resolved_symbol = resolved_symbols
                     .get(symbol_name)
                     .ok_or_else(|| format!("シンボルが解決されていません: {}", symbol_name))?;
 
-                // シンボルが未定義の場合はエラー
                 if !resolved_symbol.is_defined {
                     return Err(format!("未定義シンボルへの再配置: {}", symbol_name));
                 }
 
-                // 再配置が適用されるセクション（通常は.text）のインデックスを取得
                 let text_section_idx = section_indices
                     .get(".text")
                     .ok_or_else(|| "再配置対象セクションが見つかりません: .text".to_string())?;
 
-                // セクションへの可変参照を取得
                 let target_section = &mut output_sections[*text_section_idx];
 
-                // 再配置オフセットが範囲内かチェック
                 if reloc.offset as usize >= target_section.data.len() {
                     return Err(format!("再配置オフセットが範囲外: {}", reloc.offset));
                 }
 
-                // AArch64 ADR_PREL_LO21 再配置の適用
-                // リロケーションのオフセット位置にシンボルの相対アドレスを書き込む
                 let instruction_addr = target_section.addr + reloc.offset;
                 let symbol_addr = resolved_symbol.value;
 
-                // シンボルとの相対アドレスを計算 (ターゲットアドレス - PC値)
-                // PCは現在の命令アドレス（instruction_addr）
+                // Calculates relative address with symbol (target address - PC value)
+                // PC is the current instruction address (instruction_addr)
                 let relative_addr =
                     ((symbol_addr as i64) - (instruction_addr as i64) + reloc.addend) as i32;
 
-                // ADR命令の形式にエンコード
-                // 現在の命令を取得
                 let pos = reloc.offset as usize;
                 let instruction = u32::from_le_bytes([
                     target_section.data[pos],
@@ -758,21 +655,19 @@ impl Linker {
                     target_section.data[pos + 3],
                 ]);
 
-                // ADR命令のオペコードとレジスタ部分を保持
-                // ADR命令のフォーマット: 0bxxx10000 iiiiiiii iiiiiiii iiiddddd
+                // Keeps opcode and register portion of the ADR instruction
+                // ADR instruction format: 0bxxx10000 iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
                 // x: opcode, i: immbit, d: destination register
                 let opcode_rd = instruction & 0x9F00001F; // オペコードとレジスタ部分を保持
 
-                // ADR命令のエンコーディング（ARMv8アーキテクチャリファレンスマニュアルに基づく）
+                // Encoding of ADR instructions (based on the ARMv8 Architecture Reference Manual)
                 // immhi: upper 19 bits of immediate (bits 5-23)
                 // immlo: lower 2 bits of immediate (bits 29-30)
                 let immlo = ((relative_addr & 0x3) as u32) << 29;
                 let immhi = (((relative_addr >> 2) & 0x7FFFF) as u32) << 5;
 
-                // 新しい命令を構築
                 let new_instruction = opcode_rd | immlo | immhi;
 
-                // 更新された命令をセクションデータに書き戻す
                 let instruction_bytes = new_instruction.to_le_bytes();
                 target_section.data[pos] = instruction_bytes[0];
                 target_section.data[pos + 1] = instruction_bytes[1];
@@ -784,7 +679,6 @@ impl Linker {
         Ok(())
     }
 
-    /// シンボルテーブルエントリを書き込む
     fn write_symbol_entry(
         &self,
         data: &mut Vec<u8>,
@@ -795,29 +689,17 @@ impl Linker {
         st_other: u8,
         st_shndx: u16,
     ) {
-        // シンボル名のインデックス
         data.extend_from_slice(&st_name.to_le_bytes());
-
-        // シンボル情報（バインディングとタイプ）
         data.push(st_info);
-
-        // その他の情報
         data.push(st_other);
-
-        // セクションインデックス
         data.extend_from_slice(&st_shndx.to_le_bytes());
-
-        // シンボル値（アドレス）
         data.extend_from_slice(&st_value.to_le_bytes());
-
-        // シンボルサイズ
         data.extend_from_slice(&st_size.to_le_bytes());
     }
 
-    /// セクションヘッダーを書き込む
-    fn write_section_header(
+    fn write_section_header<W: std::io::Write>(
         &self,
-        file: &mut fs::File,
+        writer: &mut W,
         name: u32,
         _debug_name: &str,
         sh_type: u32,
@@ -831,24 +713,23 @@ impl Linker {
         sh_entsize: u64,
     ) -> io::Result<()> {
         let bytes = [
-            name.to_le_bytes().as_slice(),         // セクション名のインデックス
-            sh_type.to_le_bytes().as_slice(),      // セクションタイプ
-            sh_flags.to_le_bytes().as_slice(),     // セクションフラグ
-            sh_addr.to_le_bytes().as_slice(),      // メモリ上のアドレス
-            sh_offset.to_le_bytes().as_slice(),    // ファイル内オフセット
-            sh_size.to_le_bytes().as_slice(),      // セクションサイズ
-            sh_link.to_le_bytes().as_slice(),      // リンク情報
-            sh_info.to_le_bytes().as_slice(),      // 追加情報
-            sh_addralign.to_le_bytes().as_slice(), // アライメント
-            sh_entsize.to_le_bytes().as_slice(),   // エントリサイズ
+            name.to_le_bytes().as_slice(),
+            sh_type.to_le_bytes().as_slice(),
+            sh_flags.to_le_bytes().as_slice(),
+            sh_addr.to_le_bytes().as_slice(),
+            sh_offset.to_le_bytes().as_slice(),
+            sh_size.to_le_bytes().as_slice(),
+            sh_link.to_le_bytes().as_slice(),
+            sh_info.to_le_bytes().as_slice(),
+            sh_addralign.to_le_bytes().as_slice(),
+            sh_entsize.to_le_bytes().as_slice(),
         ]
         .concat();
 
-        file.write_all(&bytes)
+        writer.write_all(&bytes)
     }
 }
 
-/// 値をアラインメントに合わせる
 fn align(value: u64, alignment: u64) -> u64 {
     (value + alignment - 1) & !(alignment - 1)
 }
@@ -858,18 +739,6 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use std::path::Path;
-
-    #[test]
-    fn test_basic_linker_creation() {
-        let main_o = Path::new("src/parser/fixtures/main.o");
-        let sub_o = Path::new("src/parser/fixtures/sub.o");
-
-        let mut linker = Linker::new();
-
-        linker.add_objects(&[main_o, sub_o]).unwrap();
-
-        assert_eq!(linker.object_count(), 2, "Invalid number of object files");
-    }
 
     #[test]
     fn test_basic_object_parsing() {
@@ -893,13 +762,7 @@ mod tests {
         let mut linker = Linker::new();
         linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        let (resolved_symbols, unresolved_symbols) = linker.resolve_symbols();
-
-        assert!(
-            unresolved_symbols.is_empty(),
-            "There are unresolved symbols: {:?}",
-            unresolved_symbols
-        );
+        let resolved_symbols = linker.resolve_symbols().unwrap();
 
         assert!(
             resolved_symbols.contains_key("_start"),
@@ -925,9 +788,9 @@ mod tests {
         let mut linker = Linker::new();
         linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        let (mut resolved_symbols, _) = linker.resolve_symbols();
+        let mut resolved_symbols = linker.resolve_symbols().unwrap();
 
-        let output_sections = linker.layout_sections(&mut resolved_symbols);
+        let output_sections = linker.layout_sections(&mut resolved_symbols).unwrap();
 
         let mut section_iter = output_sections.iter();
         assert!(
@@ -1021,7 +884,11 @@ mod tests {
         let mut linker = Linker::new();
         linker.add_objects(&[main_o, sub_o]).unwrap();
 
-        let output_sections = linker.link().unwrap();
+        let mut resolved_symbols = linker.resolve_symbols().unwrap();
+        let mut output_sections = linker.layout_sections(&mut resolved_symbols).unwrap();
+        linker
+            .apply_relocations(&mut output_sections, &resolved_symbols)
+            .unwrap();
 
         let text_section = output_sections.iter().find(|s| s.name == ".text").unwrap();
 

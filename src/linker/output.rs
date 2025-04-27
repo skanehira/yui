@@ -19,7 +19,7 @@ pub struct ResolvedSymbol {
     pub size: u64,
     pub r#type: symbol::Type,
     pub binding: symbol::Binding,
-    pub section_index: u16,
+    pub shndx: u16,
     pub object_index: usize,
     pub is_defined: bool,
 }
