@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1745766548525,
+  "lastUpdate": 1745801836167,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -539,6 +539,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1126.35,
             "range": "± 16.13",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b0c5c619188158150b48f3075c90466a8438668",
+          "message": "Merge pull request #4 from skanehira/dependabot/cargo/insta-1.43.0\n\nchore(deps): bump insta from 1.42.2 to 1.43.0",
+          "timestamp": "2025-04-28T09:56:32+09:00",
+          "tree_id": "521d5eed015f89b9b49282e85ef03aeefcfa9aa8",
+          "url": "https://github.com/skanehira/yui/commit/3b0c5c619188158150b48f3075c90466a8438668"
+        },
+        "date": 1745801835766,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 93.92,
+            "range": "± 1.40",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1072.09,
+            "range": "± 14.14",
             "unit": "ns/iter"
           }
         ]
