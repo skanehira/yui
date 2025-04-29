@@ -13,6 +13,8 @@ use crate::elf::symbol::{self, SymbolIndex};
 use crate::elf::{header, program_header, relocation, section, segument};
 use crate::parser;
 
+static BASE_ADDR: u64 = 0x400000;
+
 type Error = Box<dyn std::error::Error>;
 
 #[derive(Debug, Default)]
@@ -58,6 +60,7 @@ impl Linker {
 
     fn make_symbol_section(
         &self,
+        latest_section_addr: u64,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> (output::Section, output::Section) {
         // symbol string table
@@ -116,7 +119,7 @@ impl Linker {
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
-            offset: align(0x3000, 1),
+            offset: latest_section_addr + 1,
             size: strtab.len() as u64,
             data: strtab,
             align: 1,
@@ -280,12 +283,12 @@ impl Linker {
                     let text_ph = program_header::ProgramHeader {
                         r#type: segument::Type::Load,
                         flags: vec![segument::Flag::Readable, segument::Flag::Executable],
-                        offset: s.offset,
-                        vaddr: s.addr,
-                        paddr: s.addr,
+                        offset: 0,
+                        vaddr: BASE_ADDR,
+                        paddr: BASE_ADDR,
                         filesz: s.size,
                         memsz: s.size,
-                        align: s.align,
+                        align: 0x10000,
                     };
                     program_headers.push(text_ph);
                 }
@@ -298,7 +301,7 @@ impl Linker {
                         paddr: s.addr,
                         filesz: s.size,
                         memsz: s.size,
-                        align: s.align,
+                        align: 0x10000,
                     };
                     program_headers.push(data_ph);
                 }
@@ -414,12 +417,11 @@ impl Linker {
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
-        let base_addr = 0x400000;
+        let output_sections = self.merge_sections(&self.objects, resolved_symbols, BASE_ADDR)?;
 
-        let output_sections =
-            self.merge_sections(&self.objects, resolved_symbols, base_addr)?;
-
-        let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols);
+        let latest_section_addr = output_sections.iter().last().unwrap().addr;
+        let (symtab_section, strtab_section) =
+            self.make_symbol_section(latest_section_addr, resolved_symbols);
 
         let mut shstrtab: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
@@ -522,28 +524,32 @@ impl Linker {
             }
         }
 
-        let data_base_addr = align(base_addr + 0x1000, 0x1000);
+        // Place after ELF header and program header
+        let text_offset = 0x100;
+        let text_addr = align(base_addr + text_offset, 4);
 
         let text_section = output::Section {
             name: ".text".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
-            addr: base_addr,
-            offset: 0x1000,
+            addr: text_addr,
+            offset: text_offset,
             size: raw_text_section.len() as u64,
             data: raw_text_section,
-            align: 0x1000,
+            align: 4,
         };
 
+        let data_offset = text_offset + text_section.size;
+        let data_base_addr = align(text_section.addr + text_section.size + 0x10000, 4);
         let data_section = output::Section {
             name: ".data".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
             addr: data_base_addr,
-            offset: 0x2000,
+            offset: data_offset,
             size: raw_data_section.len() as u64,
             data: raw_data_section,
-            align: 0x1000,
+            align: 4,
         };
 
         for symbol in resolved_symbols.values_mut() {
@@ -723,10 +729,11 @@ impl Linker {
 /// # Example
 ///
 /// ```
+/// use yui::linker::align;
 /// let aligned = align(10, 8); // Results in 16
 /// let already_aligned = align(16, 8); // Remains 16
 /// ```
-fn align(value: u64, alignment: u64) -> u64 {
+pub fn align(value: u64, alignment: u64) -> u64 {
     (value + alignment - 1) & !(alignment - 1)
 }
 
@@ -818,13 +825,12 @@ mod tests {
         );
 
         assert_eq!(
-            text_section.addr, 0x400000,
+            text_section.addr, 0x400100,
             "Start address of .text section differs from expected value"
         );
 
-        let expected_data_addr = align(text_section.addr + text_section.size, 0x1000);
         assert_eq!(
-            data_section.addr, expected_data_addr,
+            data_section.addr, 0x410110,
             "Start address of .data section differs from expected value"
         );
 
