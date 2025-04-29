@@ -61,7 +61,8 @@ impl Linker {
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> (output::Section, output::Section) {
         // symbol string table
-        let mut strtab: Vec<u8> = Vec::new();
+        // includes null string
+        let mut strtab: Vec<u8> = vec![0];
         // symbol table
         let mut symtab: Vec<u8> = Vec::new();
 
@@ -87,6 +88,9 @@ impl Linker {
                 _ => std::cmp::Ordering::Equal,
             }
         });
+
+        // add null symbol
+        self.write_symbol_entry(&mut symtab, 0, 0, 0, 0, 0, 0);
 
         for symbol in symbols.iter() {
             if symbol.name.is_empty() {
@@ -177,7 +181,8 @@ impl Linker {
                 let local_sym_count = resolved_symbols
                     .values()
                     .filter(|s| s.info.binding == crate::elf::symbol::Binding::Local)
-                    .count() as u32;
+                    .count() as u32
+                    + 1; // include null symbol
 
                 (strtab_idx, local_sym_count)
             } else {
@@ -418,6 +423,9 @@ impl Linker {
 
         let mut shstrtab: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
+
+        // add null string
+        shstrtab.push(0);
 
         for section in output_sections.iter() {
             section_name_offsets.insert(section.name.clone(), shstrtab.len());
