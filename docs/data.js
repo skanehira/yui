@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1745901014078,
+  "lastUpdate": 1745945109035,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -611,6 +611,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1051.51,
             "range": "± 10.15",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "3def8dd52e08d1f7beefd1d3bc4150448fb4e683",
+          "message": "feat(linker): improve section alignment and base address handling\n\nIntroduce a static `BASE_ADDR` for consistent base address usage. Refactor\nsection alignment and offsets to improve ELF section placement logic.\nUpdate `make_symbol_section` to accept the latest section address for\ndynamic offset calculation.\n\nBREAKING CHANGE: Adjustments to section alignment and offsets may affect\nexisting ELF outputs.",
+          "timestamp": "2025-04-30T01:44:25+09:00",
+          "tree_id": "aa02f414f528a92d067f89eacf4d833ab9defaa6",
+          "url": "https://github.com/skanehira/yui/commit/3def8dd52e08d1f7beefd1d3bc4150448fb4e683"
+        },
+        "date": 1745945108624,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 93.29,
+            "range": "± 1.48",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1010.84,
+            "range": "± 11.99",
             "unit": "ns/iter"
           }
         ]
