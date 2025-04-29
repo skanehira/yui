@@ -116,10 +116,10 @@ impl Linker {
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
-            offset: align(0x3000, 8),
+            offset: align(0x3000, 1),
             size: strtab.len() as u64,
             data: strtab,
-            align: 8,
+            align: 1,
         };
 
         let symtab_section = output::Section {
@@ -414,10 +414,10 @@ impl Linker {
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
-        let text_base_addr = 0x400000;
+        let base_addr = 0x400000;
 
         let output_sections =
-            self.merge_sections(&self.objects, resolved_symbols, text_base_addr)?;
+            self.merge_sections(&self.objects, resolved_symbols, base_addr)?;
 
         let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols);
 
@@ -482,7 +482,7 @@ impl Linker {
     ///
     /// * `objects` - A slice of ELF object files to be linked
     /// * `resolved_symbols` - A mutable reference to a HashMap mapping symbol names to their resolved locations
-    /// * `text_base_addr` - The base address where the text section should be loaded
+    /// * `base_addr` - The base address where the text section should be loaded
     ///
     /// # Returns
     ///
@@ -491,7 +491,7 @@ impl Linker {
         &self,
         objects: &[ELF],
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-        text_base_addr: u64,
+        base_addr: u64,
     ) -> Result<Vec<output::Section>, Error> {
         let mut raw_text_section = vec![];
         let mut raw_data_section = vec![];
@@ -522,26 +522,13 @@ impl Linker {
             }
         }
 
-        let data_base_addr = align(text_base_addr + 0x1000, 0x1000);
-
-        for symbol in resolved_symbols.values_mut() {
-            if let Some(&offset) = text_offsets.get(&(symbol.object_index, symbol.shndx)) {
-                // text_base_addr: entry point address
-                // offset: section offset after merged
-                // symbol.value: offset in the section
-                symbol.value = text_base_addr + (offset + symbol.value as usize) as u64;
-            }
-
-            if let Some(&offset) = data_offsets.get(&(symbol.object_index, symbol.shndx)) {
-                symbol.value = data_base_addr + (offset + symbol.value as usize) as u64;
-            }
-        }
+        let data_base_addr = align(base_addr + 0x1000, 0x1000);
 
         let text_section = output::Section {
             name: ".text".to_string(),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
-            addr: text_base_addr,
+            addr: base_addr,
             offset: 0x1000,
             size: raw_text_section.len() as u64,
             data: raw_text_section,
@@ -558,6 +545,16 @@ impl Linker {
             data: raw_data_section,
             align: 0x1000,
         };
+
+        for symbol in resolved_symbols.values_mut() {
+            if let Some(&offset) = text_offsets.get(&(symbol.object_index, symbol.shndx)) {
+                // offset: section offset after merged
+                // symbol.value: offset in the section
+                symbol.value = text_section.addr + (offset + symbol.value as usize) as u64;
+            } else if let Some(&offset) = data_offsets.get(&(symbol.object_index, symbol.shndx)) {
+                symbol.value = data_section.addr + (offset + symbol.value as usize) as u64;
+            }
+        }
 
         let mut output_sections = vec![text_section, data_section];
 
@@ -710,6 +707,25 @@ impl Linker {
     }
 }
 
+/// Aligns a value to the specified power-of-2 alignment boundary.
+///
+/// This function rounds up `value` to the next multiple of `alignment`.
+///
+/// # Arguments
+///
+/// * `value` - The value to align
+/// * `alignment` - The alignment boundary (must be a power of 2)
+///
+/// # Returns
+///
+/// The smallest value greater than or equal to `value` that is a multiple of `alignment`
+///
+/// # Example
+///
+/// ```
+/// let aligned = align(10, 8); // Results in 16
+/// let already_aligned = align(16, 8); // Remains 16
+/// ```
 fn align(value: u64, alignment: u64) -> u64 {
     (value + alignment - 1) & !(alignment - 1)
 }
