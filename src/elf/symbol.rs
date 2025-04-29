@@ -71,3 +71,18 @@ pub struct Symbol {
     pub value: u64,        // Symbol value
     pub size: u64,         // Symbol size
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn info_to_bytes_ok() {
+        let info = Info {
+            r#type: Type::Func,
+            binding: Binding::Global,
+        };
+        let bytes = u8::from(info);
+        assert_eq!(bytes, 0b00010010);
+    }
+}

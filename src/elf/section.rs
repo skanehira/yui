@@ -26,6 +26,7 @@ pub enum SectionType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u64)]
 pub enum SectionFlag {
     Undefined = 0,        // Undefined
     Write = 1 << 0,       // Writable

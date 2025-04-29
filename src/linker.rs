@@ -9,7 +9,7 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use crate::elf::ELF;
-use crate::elf::symbol::SymbolIndex;
+use crate::elf::symbol::{self, SymbolIndex};
 use crate::elf::{header, program_header, relocation, section, segument};
 use crate::parser;
 
@@ -58,19 +58,40 @@ impl Linker {
 
     fn make_symbol_section(
         &self,
-        resolved_symbols: HashMap<String, output::ResolvedSymbol>,
+        resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> (output::Section, output::Section) {
         // symbol string table
         let mut strtab: Vec<u8> = Vec::new();
         // symbol table
         let mut symtab: Vec<u8> = Vec::new();
 
-        for (name, symbol) in resolved_symbols.iter() {
-            if name.is_empty() {
+        let mut symbols: Vec<_> = resolved_symbols
+            .values()
+            .filter(|s| !s.name.is_empty())
+            .collect();
+
+        // Sort symbols properly: NULL > Local > Global > Weak
+        symbols.sort_by(|&a, &b| {
+            match (a.info.binding, b.info.binding) {
+                // Local symbols always come first
+                (symbol::Binding::Local, symbol::Binding::Local) => std::cmp::Ordering::Equal,
+                (symbol::Binding::Local, _) => std::cmp::Ordering::Less,
+                (_, symbol::Binding::Local) => std::cmp::Ordering::Greater,
+
+                // Global symbols come before weak symbols
+                (symbol::Binding::Global, symbol::Binding::Global) => std::cmp::Ordering::Equal,
+                (symbol::Binding::Global, _) => std::cmp::Ordering::Less,
+                (_, symbol::Binding::Global) => std::cmp::Ordering::Greater,
+
+                // Otherwise equivalent (both weak, etc.)
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+
+        for symbol in symbols.iter() {
+            if symbol.name.is_empty() {
                 continue;
             }
-            strtab.extend_from_slice(name.as_bytes());
-            strtab.push(0);
 
             self.write_symbol_entry(
                 &mut symtab,
@@ -81,6 +102,9 @@ impl Linker {
                 0, // st_other
                 symbol.shndx,
             );
+
+            strtab.extend_from_slice(symbol.name.as_bytes());
+            strtab.push(0);
         }
 
         let strtab_section = output::Section {
@@ -115,67 +139,47 @@ impl Linker {
         section_tables: Vec<output::Section>,
         section_name_offsets: HashMap<String, usize>,
     ) -> Result<(), Error> {
-        let mut elf_header = self.create_elf_header(&section_tables);
-
-        let Some(output::ResolvedSymbol {
-            value: entry_point, ..
-        }) = resolved_symbols.get("_start")
+        let Some(output::ResolvedSymbol { value: entry, .. }) = resolved_symbols.get("_start")
         else {
             return Err("sybmol _start not found".into());
         };
 
-        elf_header.entry = *entry_point;
-
-        let section_data_end = section_tables
-            .iter()
-            .map(|s| s.offset + align(s.size, 8))
-            .max()
-            .unwrap_or(0x3000);
-
-        let sh_offset = align(section_data_end, 8);
-        elf_header.shoff = sh_offset;
-        elf_header.shentsize = 64;
-        elf_header.shnum = (section_tables.len() + 1) as u16; // include NULL section
-
-        let shstrtab_idx = section_tables
-            .iter()
-            .position(|s| s.name == ".shstrtab")
-            .unwrap_or(0);
-        elf_header.shstrndx = (shstrtab_idx + 1) as u16;
-
-        let program_headers = self.create_program_headers(&section_tables);
+        let elf_header = self.create_elf_header(*entry, &section_tables);
 
         writer.write_all(&elf_header.to_vec())?;
 
+        let program_headers = self.create_program_headers(&section_tables);
         self.write_program_headers(writer, &program_headers)?;
 
         self.write_sections(writer, &section_tables)?;
 
-        writer.seek(SeekFrom::Start(sh_offset))?;
+        writer.seek(SeekFrom::Start(elf_header.shoff))?;
 
+        // null section header
         self.write_section_header(writer, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
 
+        // section headers
         for section in section_tables.iter() {
             let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
             let sh_type = section.r#type as u32;
             let mut sh_flags: u64 = 0;
-            for flag in &section.flags {
-                let bit = match flag {
-                    section::SectionFlag::Write => 0x1,
-                    section::SectionFlag::Alloc => 0x2,
-                    section::SectionFlag::ExecInstr => 0x4,
-                    _ => 0,
-                };
-                sh_flags |= bit;
+            for f in &section.flags {
+                sh_flags |= *f as u64;
             }
 
             let (sh_link, sh_info) = if section.name == ".symtab" {
                 let strtab_idx = section_tables
                     .iter()
                     .position(|s| s.name == ".strtab")
-                    .unwrap_or(0)
-                    + 1;
-                (strtab_idx as u32, 1)
+                    .map(|i| i + 1)
+                    .unwrap_or(0) as u32; // includes null section
+
+                let local_sym_count = resolved_symbols
+                    .values()
+                    .filter(|s| s.info.binding == crate::elf::symbol::Binding::Local)
+                    .count() as u32;
+
+                (strtab_idx, local_sym_count)
             } else {
                 (0, 0)
             };
@@ -200,11 +204,27 @@ impl Linker {
         Ok(())
     }
 
-    fn create_elf_header(&self, output_sections: &[output::Section]) -> header::Header {
+    fn create_elf_header(&self, entry: u64, section_tables: &[output::Section]) -> header::Header {
+        // section header offset is after all sections
+        let shoff = section_tables
+            .iter()
+            .map(|s| s.offset + align(s.size, 8))
+            .max()
+            .unwrap();
+
+        // the number of entries in the section includes null section header
+        let shnum = (section_tables.len() + 1) as u16;
+
+        let shstrndx = section_tables
+            .iter()
+            .position(|s| s.name == ".shstrtab")
+            .map(|i| (i + 1))
+            .unwrap_or(0) as u16;
+
         header::Header {
             ident: header::Ident {
                 class: header::Class::Bit64,
-                data: header::Data::Lsb, // Little Endian
+                data: header::Data::Lsb,
                 version: header::IdentVersion::Current,
                 os_abi: header::OSABI::SystemV,
                 abi_version: 0,
@@ -212,16 +232,16 @@ impl Linker {
             r#type: header::Type::Exec,
             machine: header::Machine::AArch64,
             version: header::Version::Current,
-            entry: 0x400000,
+            entry,
             phoff: 64,
-            shoff: 0,
+            shoff,
             flags: 0,
             ehsize: 64,
             phentsize: 56,
-            phnum: self.count_program_headers(output_sections),
-            shentsize: 0,
-            shnum: 0,
-            shstrndx: 0,
+            phnum: self.count_program_headers(section_tables),
+            shentsize: 64, // the entry size for the section header table is 64 bytes
+            shnum,
+            shstrndx,
         }
     }
 
@@ -237,11 +257,10 @@ impl Linker {
             (".interp", ()),
             (".note", ()),
         ]);
-        let x: Vec<_> = output_sections
+        output_sections
             .iter()
             .filter(|s| sym_map.contains_key(s.name.as_str()))
-            .collect();
-        x.len() as u16
+            .count() as u16
     }
 
     fn create_program_headers(
@@ -293,22 +312,14 @@ impl Linker {
         headers: &[program_header::ProgramHeader],
     ) -> io::Result<()> {
         for ph in headers {
-            let mut flags: u32 = 0;
-            for flag in &ph.flags {
-                let bit = match flag {
-                    segument::Flag::Executable => 0x1,
-                    segument::Flag::Writable => 0x2,
-                    segument::Flag::Readable => 0x4,
-                    segument::Flag::MaskOS | segument::Flag::MaskProc => {
-                        continue;
-                    }
-                };
-                flags |= bit;
+            let mut flag: u32 = 0;
+            for f in &ph.flags {
+                flag |= *f as u32;
             }
 
             let bytes = &[
                 (ph.r#type as u32).to_le_bytes().as_slice(),
-                flags.to_le_bytes().as_slice(),
+                flag.to_le_bytes().as_slice(),
                 ph.offset.to_le_bytes().as_slice(),
                 ph.vaddr.to_le_bytes().as_slice(),
                 ph.paddr.to_le_bytes().as_slice(),
@@ -403,7 +414,7 @@ impl Linker {
         let output_sections =
             self.merge_sections(&self.objects, resolved_symbols, text_base_addr)?;
 
-        let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols.clone());
+        let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols);
 
         let mut shstrtab: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();

@@ -27,31 +27,4 @@ pub enum Flag {
     Executable = 0x1,      // Segment is executable
     Writable = 0x2,        // Segment is writable
     Readable = 0x4,        // Segment is readable
-    MaskOS = 0x0ff00000,   // OS-specific
-    MaskProc = 0xf0000000, // Processor-specific
-}
-
-// TODO
-// .text
-// .rodata
-// .hash
-// .dynsym
-// .dynstr
-// .plt
-// .rel.got
-#[derive(Debug, PartialEq, Eq)]
-pub struct TextSegument {}
-
-// TODO
-// .data
-// .dynamic
-// .got
-// .bss
-#[derive(Debug, PartialEq, Eq)]
-pub struct DataSegument {}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Segument {
-    Text(TextSegument),
-    Data(DataSegument),
 }
