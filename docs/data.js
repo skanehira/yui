@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1745801836167,
+  "lastUpdate": 1745901014078,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -575,6 +575,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1072.09,
             "range": "± 14.14",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "49ddee2f3ec6bb479d00a7d6001dcbf5ccdc05da",
+          "message": "feat(linker): refactor and document section merging logic\n\nRefactored the `merge_sections` method to consolidate `.text` and `.data`\nsections from multiple ELF objects into a single output executable.\nRemoved redundant methods `has_symbol` and `has_undefined_symbol` to\nstreamline the codebase.\n\nAdded detailed documentation comments to the `merge_sections` method,\nexplaining its purpose, arguments, and return values.\n\nUpdated tests to reflect changes in section merging and address\ncalculations.",
+          "timestamp": "2025-04-29T13:29:06+09:00",
+          "tree_id": "e4a736f357df76ed983cffe444c1a53dba0c08e9",
+          "url": "https://github.com/skanehira/yui/commit/49ddee2f3ec6bb479d00a7d6001dcbf5ccdc05da"
+        },
+        "date": 1745901013793,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 93.5,
+            "range": "± 2.88",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1051.51,
+            "range": "± 10.15",
             "unit": "ns/iter"
           }
         ]
