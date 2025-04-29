@@ -371,28 +371,6 @@ impl Linker {
         Ok(())
     }
 
-    pub fn has_symbol(&self, name: &str) -> bool {
-        for obj in &self.objects {
-            for symbol in &obj.symbols {
-                if symbol.name == name {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    pub fn has_undefined_symbol(&self, name: &str) -> bool {
-        for obj in &self.objects {
-            for symbol in &obj.symbols {
-                if symbol.name == name && SymbolIndex::Undefined == symbol.shndx {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
     pub fn resolve_symbols(&self) -> Result<HashMap<String, output::ResolvedSymbol>, Error> {
         let mut resolved_symbols: HashMap<String, output::ResolvedSymbol> = HashMap::new();
         let mut duplicate_symbols = vec![];
@@ -455,47 +433,10 @@ impl Linker {
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
     ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
-        let mut output_sections: Vec<output::Section> = Vec::new();
+        let text_base_addr = 0x400000;
 
-        let (text_data, text_offsets) = self.merge_sections(".text", 1);
-        let (data_data, data_offsets) = self.merge_sections(".data", 2);
-
-        let base_addr = 0x400000;
-        let text_section = output::Section {
-            name: ".text".to_string(),
-            r#type: section::SectionType::ProgBits,
-            flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
-            addr: base_addr + 0x1000,
-            offset: 0x1000,
-            size: text_data.len() as u64,
-            data: text_data,
-            align: 0x1000,
-        };
-
-        let data_addr = align(base_addr + 0x2000, 0x1000);
-        let data_section = output::Section {
-            name: ".data".to_string(),
-            r#type: section::SectionType::ProgBits,
-            flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
-            addr: data_addr,
-            offset: 0x2000,
-            size: data_data.len() as u64,
-            data: data_data,
-            align: 0x1000,
-        };
-
-        output_sections.push(text_section);
-        output_sections.push(data_section);
-
-        self.update_symbol_addresses(
-            resolved_symbols,
-            &text_offsets,
-            base_addr + 0x1000,
-            &data_offsets,
-            data_addr,
-        );
-
-        self.apply_relocations(&mut output_sections, resolved_symbols)?;
+        let output_sections =
+            self.merge_sections(&self.objects, resolved_symbols, text_base_addr)?;
 
         let (symtab_section, strtab_section) = self.make_symbol_section(resolved_symbols.clone());
 
@@ -545,53 +486,100 @@ impl Linker {
         Ok((section_tables, section_name_offsets))
     }
 
+    /// Merges sections from multiple ELF object files into the output executable.
+    ///
+    /// This method:
+    /// 1. Combines all `.text` sections from input objects into one output `.text` section
+    /// 2. Combines all `.data` sections from input objects into one output `.data` section
+    /// 3. Updates symbol addresses based on their new positions in the merged sections
+    /// 4. Applies relocations to the merged sections
+    ///
+    /// # Arguments
+    ///
+    /// * `objects` - A slice of ELF object files to be linked
+    /// * `resolved_symbols` - A mutable reference to a HashMap mapping symbol names to their resolved locations
+    /// * `text_base_addr` - The base address where the text section should be loaded
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<output::Section>, Error>` - A vector of output sections or an error
     fn merge_sections(
         &self,
-        section_name: &str,
-        section_index: u16,
-    ) -> (Vec<u8>, HashMap<(usize, u16), usize>) {
-        let mut section_data: Vec<u8> = Vec::new();
-        let mut offsets: HashMap<(usize, u16), usize> = HashMap::new();
-        let mut current_offset = 0;
-
-        for (obj_idx, obj) in self.objects.iter().enumerate() {
-            for section in &obj.section_headers {
-                if section.name == section_name {
-                    offsets.insert((obj_idx, section_index), current_offset);
-                    section_data.extend_from_slice(&section.section_raw_data);
-                    current_offset += section.section_raw_data.len();
-                }
-            }
-        }
-
-        (section_data, offsets)
-    }
-
-    fn update_symbol_addresses(
-        &self,
+        objects: &[ELF],
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-        text_offsets: &HashMap<(usize, u16), usize>,
         text_base_addr: u64,
-        data_offsets: &HashMap<(usize, u16), usize>,
-        data_base_addr: u64,
-    ) {
-        for symbol in resolved_symbols.values_mut() {
-            match symbol.shndx {
-                1 => {
-                    if let Some(&offset) = text_offsets.get(&(symbol.object_index, symbol.shndx)) {
-                        symbol.value = text_base_addr + (offset + symbol.value as usize) as u64;
+    ) -> Result<Vec<output::Section>, Error> {
+        let mut raw_text_section = vec![];
+        let mut raw_data_section = vec![];
+
+        let mut text_offsets: HashMap<(usize, u16), usize> = HashMap::new();
+        let mut data_offsets: HashMap<(usize, u16), usize> = HashMap::new();
+
+        let mut text_current_offset = 0;
+        let mut data_current_offset = 0;
+
+        for (obj_idx, obj) in objects.iter().enumerate() {
+            for (section_idx, section) in obj.section_headers.iter().enumerate() {
+                match section.name.as_str() {
+                    ".text" => {
+                        text_offsets.insert((obj_idx, section_idx as u16), text_current_offset);
+                        raw_text_section.extend_from_slice(&section.section_raw_data);
+                        text_current_offset += section.section_raw_data.len();
                     }
-                }
-                2 => {
-                    if let Some(&offset) = data_offsets.get(&(symbol.object_index, symbol.shndx)) {
-                        symbol.value = data_base_addr + (offset + symbol.value as usize) as u64;
+                    ".data" => {
+                        data_offsets.insert((obj_idx, section_idx as u16), data_current_offset);
+                        raw_data_section.extend_from_slice(&section.section_raw_data);
+                        data_current_offset += section.section_raw_data.len();
                     }
-                }
-                _ => {
-                    // TODO
+                    _ => {
+                        // TODO
+                    }
                 }
             }
         }
+
+        let data_base_addr = align(text_base_addr + 0x1000, 0x1000);
+
+        for symbol in resolved_symbols.values_mut() {
+            if let Some(&offset) = text_offsets.get(&(symbol.object_index, symbol.shndx)) {
+                // text_base_addr: entry point address
+                // offset: section offset after merged
+                // symbol.value: offset in the section
+                symbol.value = text_base_addr + (offset + symbol.value as usize) as u64;
+            }
+
+            if let Some(&offset) = data_offsets.get(&(symbol.object_index, symbol.shndx)) {
+                symbol.value = data_base_addr + (offset + symbol.value as usize) as u64;
+            }
+        }
+
+        let text_section = output::Section {
+            name: ".text".to_string(),
+            r#type: section::SectionType::ProgBits,
+            flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
+            addr: text_base_addr,
+            offset: 0x1000,
+            size: raw_text_section.len() as u64,
+            data: raw_text_section,
+            align: 0x1000,
+        };
+
+        let data_section = output::Section {
+            name: ".data".to_string(),
+            r#type: section::SectionType::ProgBits,
+            flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
+            addr: data_base_addr,
+            offset: 0x2000,
+            size: raw_data_section.len() as u64,
+            data: raw_data_section,
+            align: 0x1000,
+        };
+
+        let mut output_sections = vec![text_section, data_section];
+
+        self.apply_relocations(&mut output_sections, resolved_symbols)?;
+
+        Ok(output_sections)
     }
 
     pub fn apply_relocations(
@@ -749,20 +737,6 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn test_basic_object_parsing() {
-        let main_o = Path::new("src/parser/fixtures/main.o");
-
-        let mut linker = Linker::new();
-        linker.add_objects(&[main_o]).unwrap();
-
-        let has_start = linker.has_symbol("_start");
-        assert!(has_start, "Symbol _start not found");
-
-        let uses_x = linker.has_undefined_symbol("x");
-        assert!(uses_x, "Undefined symbol x not found");
-    }
-
-    #[test]
     fn test_symbol_resolution() {
         let main_o = Path::new("src/parser/fixtures/main.o");
         let sub_o = Path::new("src/parser/fixtures/sub.o");
@@ -844,7 +818,7 @@ mod tests {
         );
 
         assert_eq!(
-            text_section.addr, 0x401000,
+            text_section.addr, 0x400000,
             "Start address of .text section differs from expected value"
         );
 
@@ -906,12 +880,8 @@ mod tests {
             "Instruction offset is out of range"
         );
 
-        let instruction = u32::from_le_bytes([
-            text_section.data[offset],
-            text_section.data[offset + 1],
-            text_section.data[offset + 2],
-            text_section.data[offset + 3],
-        ]);
+        let instruction =
+            u32::from_le_bytes(text_section.data[offset..offset + 4].try_into().unwrap());
 
         let addr_field = instruction & 0x1FFFFF;
 
