@@ -17,8 +17,7 @@ pub struct ResolvedSymbol {
     pub name: String,
     pub value: u64,
     pub size: u64,
-    pub r#type: symbol::Type,
-    pub binding: symbol::Binding,
+    pub info: symbol::Info,
     pub shndx: u16,
     pub object_index: usize,
     pub is_defined: bool,
@@ -26,7 +25,7 @@ pub struct ResolvedSymbol {
 
 impl ResolvedSymbol {
     pub fn is_stronger_than(&self, other: &Self) -> bool {
-        match (self.binding, other.binding) {
+        match (self.info.binding, other.info.binding) {
             (symbol::Binding::Local, _) => true,
             (_, symbol::Binding::Weak) => true,
             (symbol::Binding::Global, symbol::Binding::Global) => false,

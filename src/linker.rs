@@ -72,14 +72,12 @@ impl Linker {
             strtab.extend_from_slice(name.as_bytes());
             strtab.push(0);
 
-            let st_info = ((symbol.binding as u8) << 4) | (symbol.r#type as u8);
-
             self.write_symbol_entry(
                 &mut symtab,
                 strtab.len() as u32,
                 symbol.value,
                 symbol.size,
-                st_info,
+                symbol.info.into(),
                 0, // st_other
                 symbol.shndx,
             );
@@ -147,7 +145,7 @@ impl Linker {
 
         let program_headers = self.create_program_headers(&section_tables);
 
-        self.write_elf_header(writer, &elf_header)?;
+        writer.write_all(&elf_header.to_vec())?;
 
         self.write_program_headers(writer, &program_headers)?;
 
@@ -289,38 +287,6 @@ impl Linker {
         program_headers
     }
 
-    fn write_elf_header<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut W,
-        header: &header::Header,
-    ) -> io::Result<()> {
-        let bytes = [
-            &[0x7f, b'E', b'L', b'F'],
-            (header.ident.class as u8).to_le_bytes().as_slice(),
-            (header.ident.data as u8).to_le_bytes().as_slice(),
-            (header.ident.version as u8).to_le_bytes().as_slice(),
-            (header.ident.os_abi as u8).to_le_bytes().as_slice(),
-            (header.ident.abi_version).to_le_bytes().as_slice(),
-            [0; 7].as_slice(),
-            (header.r#type as u16).to_le_bytes().as_slice(),
-            (header.machine as u16).to_le_bytes().as_slice(),
-            (header.version as u32).to_le_bytes().as_slice(),
-            header.entry.to_le_bytes().as_slice(),
-            header.phoff.to_le_bytes().as_slice(),
-            header.shoff.to_le_bytes().as_slice(),
-            header.flags.to_le_bytes().as_slice(),
-            header.ehsize.to_le_bytes().as_slice(),
-            header.phentsize.to_le_bytes().as_slice(),
-            header.phnum.to_le_bytes().as_slice(),
-            header.shentsize.to_le_bytes().as_slice(),
-            header.shnum.to_le_bytes().as_slice(),
-            header.shstrndx.to_le_bytes().as_slice(),
-        ]
-        .concat();
-
-        writer.write_all(&bytes)
-    }
-
     fn write_program_headers<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -385,8 +351,7 @@ impl Linker {
                     name: symbol.name.clone(),
                     value: symbol.value,
                     size: symbol.size,
-                    r#type: symbol.info.r#type,
-                    binding: symbol.info.binding,
+                    info: symbol.info,
                     shndx: symbol.shndx,
                     object_index: obj_idx,
                     is_defined: SymbolIndex::Undefined != symbol.shndx,

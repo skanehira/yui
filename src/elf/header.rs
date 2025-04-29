@@ -143,3 +143,31 @@ pub struct Header {
     /// The index of the section header string table.
     pub shstrndx: u16,
 }
+
+impl Header {
+    pub fn to_vec(&self) -> Vec<u8> {
+        [
+            &[0x7f, b'E', b'L', b'F'],
+            (self.ident.class as u8).to_le_bytes().as_slice(),
+            (self.ident.data as u8).to_le_bytes().as_slice(),
+            (self.ident.version as u8).to_le_bytes().as_slice(),
+            (self.ident.os_abi as u8).to_le_bytes().as_slice(),
+            (self.ident.abi_version).to_le_bytes().as_slice(),
+            [0; 7].as_slice(), // Padding
+            (self.r#type as u16).to_le_bytes().as_slice(),
+            (self.machine as u16).to_le_bytes().as_slice(),
+            (self.version as u32).to_le_bytes().as_slice(),
+            self.entry.to_le_bytes().as_slice(),
+            self.phoff.to_le_bytes().as_slice(),
+            self.shoff.to_le_bytes().as_slice(),
+            self.flags.to_le_bytes().as_slice(),
+            self.ehsize.to_le_bytes().as_slice(),
+            self.phentsize.to_le_bytes().as_slice(),
+            self.phnum.to_le_bytes().as_slice(),
+            self.shentsize.to_le_bytes().as_slice(),
+            self.shnum.to_le_bytes().as_slice(),
+            self.shstrndx.to_le_bytes().as_slice(),
+        ]
+        .concat()
+    }
+}

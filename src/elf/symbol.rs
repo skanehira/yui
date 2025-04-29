@@ -27,10 +27,16 @@ pub enum Binding {
     Hiproc = 15, // End of processor-specific
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Info {
     pub r#type: Type,
     pub binding: Binding,
+}
+
+impl From<Info> for u8 {
+    fn from(info: Info) -> Self {
+        ((info.binding as u8) << 4) | (info.r#type as u8)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
