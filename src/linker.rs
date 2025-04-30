@@ -60,7 +60,7 @@ impl Linker {
 
     fn make_symbol_section(
         &self,
-        latest_section_addr: u64,
+        latest_section_offset: u64,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> (output::Section, output::Section) {
         // symbol string table
@@ -71,7 +71,6 @@ impl Linker {
 
         let mut symbols: Vec<_> = resolved_symbols
             .values()
-            .filter(|s| !s.name.is_empty())
             .collect();
 
         // Sort symbols properly: NULL > Local > Global > Weak
@@ -96,10 +95,6 @@ impl Linker {
         self.write_symbol_entry(&mut symtab, 0, 0, 0, 0, 0, 0);
 
         for symbol in symbols.iter() {
-            if symbol.name.is_empty() {
-                continue;
-            }
-
             self.write_symbol_entry(
                 &mut symtab,
                 strtab.len() as u32,
@@ -119,7 +114,7 @@ impl Linker {
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
-            offset: latest_section_addr + 1,
+            offset: latest_section_offset + 1,
             size: strtab.len() as u64,
             data: strtab,
             align: 1,
@@ -362,10 +357,6 @@ impl Linker {
 
         for (obj_idx, obj) in self.objects.iter().enumerate() {
             for symbol in &obj.symbols {
-                if symbol.name.is_empty() {
-                    continue;
-                }
-
                 let new_symbol = output::ResolvedSymbol {
                     name: symbol.name.clone(),
                     value: symbol.value,
@@ -419,9 +410,9 @@ impl Linker {
     ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
         let output_sections = self.merge_sections(&self.objects, resolved_symbols, BASE_ADDR)?;
 
-        let latest_section_addr = output_sections.iter().last().unwrap().addr;
+        let latest_section_offset = output_sections.iter().last().unwrap().offset;
         let (symtab_section, strtab_section) =
-            self.make_symbol_section(latest_section_addr, resolved_symbols);
+            self.make_symbol_section(latest_section_offset, resolved_symbols);
 
         let mut shstrtab: Vec<u8> = Vec::new();
         let mut section_name_offsets: HashMap<String, usize> = HashMap::new();
