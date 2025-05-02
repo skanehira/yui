@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1745945109035,
+  "lastUpdate": 1746205075804,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -647,6 +647,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1010.84,
             "range": "± 11.99",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "8c7ee2c36aaac1df35560c4fcec3d73df7024a86",
+          "message": "chore: fmt",
+          "timestamp": "2025-05-03T01:57:01+09:00",
+          "tree_id": "481a3e6cc0c8d9baebfd64b96f11d9daefcd0d99",
+          "url": "https://github.com/skanehira/yui/commit/8c7ee2c36aaac1df35560c4fcec3d73df7024a86"
+        },
+        "date": 1746205075437,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 101.77,
+            "range": "± 6.46",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1020.49,
+            "range": "± 15.95",
             "unit": "ns/iter"
           }
         ]
