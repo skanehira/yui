@@ -31,16 +31,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn create_output_file(path: &Path) -> Result<std::fs::File, std::io::Error> {
-    #[cfg(target_family = "unix")]
     use std::os::unix::fs::OpenOptionsExt as _;
 
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).truncate(true).create(true);
-
-    #[cfg(target_family = "unix")]
-    options.mode(0o655); // rw-r-xr-x
-
-    let file = options.open(path)?;
+    let file = options
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .mode(0o655) // rw-r-xr-x
+        .open(path)?;
 
     Ok(file)
 }
