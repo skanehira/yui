@@ -28,29 +28,33 @@ impl Linker {
         }
     }
 
-    fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Error> {
+    pub fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Error> {
         for path in paths {
             let obj = fs::read(path)?;
             let elf = parser::parse_elf(&obj)?.1;
             self.objects.push(elf);
         }
-
         Ok(())
     }
 
-    pub fn link_to_file(&mut self, output_path: &Path, input_paths: &[&Path]) -> Result<(), Error> {
-        self.add_objects(input_paths)?;
+    pub fn link_to_file(&mut self, inputs: Vec<Vec<u8>>) -> Result<Vec<u8>, Error> {
+        for input in inputs {
+            let obj = parser::parse_elf(&input)?.1;
+            self.objects.push(obj);
+        }
         let mut resolved_symbols = self.resolve_symbols()?;
         let (output_sections, section_name_offsets) =
             self.layout_sections(&mut resolved_symbols)?;
-        let mut file = create_output_file(output_path)?;
+        let mut out = std::io::Cursor::new(Vec::new());
 
         self.write_executable(
-            &mut file,
+            &mut out,
             resolved_symbols,
             output_sections,
             section_name_offsets,
-        )
+        )?;
+
+        Ok(out.into_inner())
     }
 
     fn make_symbol_section(
@@ -719,21 +723,6 @@ impl Linker {
 /// ```
 pub fn align(value: u64, alignment: u64) -> u64 {
     (value + alignment - 1) & !(alignment - 1)
-}
-
-fn create_output_file(path: &Path) -> Result<fs::File, Error> {
-    #[cfg(target_family = "unix")]
-    use std::os::unix::fs::OpenOptionsExt as _;
-
-    let mut options = fs::OpenOptions::new();
-    options.write(true).truncate(true).create(true);
-
-    #[cfg(target_family = "unix")]
-    options.mode(0o655); // rw-r-xr-x
-
-    let file = options.open(path)?;
-
-    Ok(file)
 }
 
 #[cfg(test)]
