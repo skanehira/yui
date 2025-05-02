@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1746205075804,
+  "lastUpdate": 1746226738308,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -683,6 +683,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1020.49,
             "range": "± 15.95",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f32c7fb64ffaee5421aabaac4e771b1ec9b68311",
+          "message": "ci: add test (#5)\n\n* ci: add test\n\n* fix: ci fail\n\n* debug\n\n* ci: add trigger for tests\n\n* fix: ci fail",
+          "timestamp": "2025-05-03T07:58:19+09:00",
+          "tree_id": "a4d84d942b11c1c68ed9cd02a7e193106156af30",
+          "url": "https://github.com/skanehira/yui/commit/f32c7fb64ffaee5421aabaac4e771b1ec9b68311"
+        },
+        "date": 1746226737929,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 91.56,
+            "range": "± 1.72",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1033.81,
+            "range": "± 9.91",
             "unit": "ns/iter"
           }
         ]
