@@ -24,7 +24,7 @@ pub enum Type {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u32)]
 pub enum Flag {
-    Executable = 0x1,      // Segment is executable
-    Writable = 0x2,        // Segment is writable
-    Readable = 0x4,        // Segment is readable
+    Executable = 0x1, // Segment is executable
+    Writable = 0x2,   // Segment is writable
+    Readable = 0x4,   // Segment is readable
 }
