@@ -57,6 +57,23 @@ jobs:
       - name: Build
         run: cargo build
 
+  e2e-test:
+    name: E2E test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-shared-key: setup-rust-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build
+        run: cargo build --release
+      - name: Run Test
+        run: |
+          cd tests
+          bash run.sh
+
   test:
     name: Test
     strategy:
