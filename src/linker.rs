@@ -5,7 +5,6 @@ pub mod output;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, SeekFrom};
-use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use crate::elf::ELF;
@@ -44,12 +43,8 @@ impl Linker {
         let mut resolved_symbols = self.resolve_symbols()?;
         let (output_sections, section_name_offsets) =
             self.layout_sections(&mut resolved_symbols)?;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .mode(0o655) // rw-r-xr-x
-            .open(output_path)?;
+        let mut file = create_output_file(output_path)?;
+
         self.write_executable(
             &mut file,
             resolved_symbols,
@@ -69,9 +64,7 @@ impl Linker {
         // symbol table
         let mut symtab: Vec<u8> = Vec::new();
 
-        let mut symbols: Vec<_> = resolved_symbols
-            .values()
-            .collect();
+        let mut symbols: Vec<_> = resolved_symbols.values().collect();
 
         // Sort symbols properly: NULL > Local > Global > Weak
         symbols.sort_by(|&a, &b| {
@@ -173,8 +166,8 @@ impl Linker {
                 let strtab_idx = section_tables
                     .iter()
                     .position(|s| s.name == ".strtab")
-                    .map(|i| i + 1)
-                    .unwrap_or(0) as u32; // includes null section
+                    .map(|i| i + 1) // includes null section
+                    .unwrap_or(0) as u32;
 
                 let local_sym_count = resolved_symbols
                     .values()
@@ -726,6 +719,21 @@ impl Linker {
 /// ```
 pub fn align(value: u64, alignment: u64) -> u64 {
     (value + alignment - 1) & !(alignment - 1)
+}
+
+fn create_output_file(path: &Path) -> Result<fs::File, Error> {
+    #[cfg(target_family = "unix")]
+    use std::os::unix::fs::OpenOptionsExt as _;
+
+    let mut options = fs::OpenOptions::new();
+    options.write(true).truncate(true).create(true);
+
+    #[cfg(target_family = "unix")]
+    options.mode(0o655); // rw-r-xr-x
+
+    let file = options.open(path)?;
+
+    Ok(file)
 }
 
 #[cfg(test)]
