@@ -38,7 +38,7 @@ fn create_output_file(path: &Path) -> Result<std::fs::File, std::io::Error> {
         .write(true)
         .truncate(true)
         .create(true)
-        .mode(0o655) // rw-r-xr-x
+        .mode(0o755) // rwxr-xr-x
         .open(path)?;
 
     Ok(file)

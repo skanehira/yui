@@ -18,7 +18,6 @@ EOF
 
 $linker "$t/exe" "$t/main.o" "$t/sub.o"
 
-ls -la "$t/exe"
 "./$t/exe"
 
 result=$?
