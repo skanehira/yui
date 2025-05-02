@@ -16,8 +16,9 @@ cat <<EOF | gcc -xc -c -o "$t/sub.o" -
 int x = 11;
 EOF
 
-../target/release/yui "$t/exe" "$t/main.o" "$t/sub.o"
+$linker "$t/exe" "$t/main.o" "$t/sub.o"
 
+ls -la "$t/exe"
 "./$t/exe"
 
 result=$?
