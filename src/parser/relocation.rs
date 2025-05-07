@@ -17,6 +17,11 @@ impl TryFrom<u32> for RelocationType {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             274 => Ok(Self::Aarch64AdrPrelLo21),
+            275 => Ok(Self::Aarch64AdrPrelPgHi21),
+            277 => Ok(Self::Aarch64AdrAbsLo12Nc),
+            283 => Ok(Self::Aarch64Call26),
+            311 => Ok(Self::Aarch64AdrGotPage),
+            312 => Ok(Self::Aarch64AdrGotLo12Nc),
             _ => Err(ParseError::InvalidRelocationType(value)),
         }
     }
