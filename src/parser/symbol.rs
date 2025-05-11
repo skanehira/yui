@@ -79,7 +79,8 @@ pub fn parse<'a>(raw: &'a [u8], section_headers: &'a [Header]) -> ParseResult<'a
     };
 
     // get .strtab
-    let string_table = &raw[section_headers[symbol_header.link as usize].offset as usize..];
+    let strtab = &section_headers[symbol_header.link as usize];
+    let string_table = &raw[strtab.offset as usize..(strtab.offset + strtab.size) as usize];
 
     let entry_count = (symbol_header.size / symbol_header.entsize) as usize;
 
