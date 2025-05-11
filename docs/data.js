@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1746410090433,
+  "lastUpdate": 1746977419548,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -755,6 +755,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1007.95,
             "range": "± 14.61",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "sho19921005@gmail.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "630fd20f6965c3b0af5429bcf51a6a0298b3bfd5",
+          "message": "fix(parser): correct string table slicing logic\n\nEnsure proper slicing of string tables in `section.rs` and `symbol.rs`\nby including both offset and size. This resolves potential out-of-bound\nerrors when accessing string tables.\n\nAffected files:\n- `src/parser/section.rs`\n- `src/parser/symbol.rs`",
+          "timestamp": "2025-05-11T22:39:05+09:00",
+          "tree_id": "30a8a184a16ad04ee88ccd8d82d28cebb1099236",
+          "url": "https://github.com/skanehira/yui/commit/630fd20f6965c3b0af5429bcf51a6a0298b3bfd5"
+        },
+        "date": 1746977419231,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 90.98,
+            "range": "± 1.46",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1028.12,
+            "range": "± 14.77",
             "unit": "ns/iter"
           }
         ]
