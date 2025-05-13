@@ -486,8 +486,8 @@ impl Linker {
         let mut raw_text_section = vec![];
         let mut raw_data_section = vec![];
 
-        let mut text_offsets: HashMap<(usize, u16), usize> = HashMap::new();
-        let mut data_offsets: HashMap<(usize, u16), usize> = HashMap::new();
+        let mut text_offsets = HashMap::new();
+        let mut data_offsets = HashMap::new();
 
         let mut text_current_offset = 0;
         let mut data_current_offset = 0;
@@ -603,10 +603,6 @@ impl Linker {
                 let resolved_symbol = resolved_symbols
                     .get(symbol_name)
                     .ok_or_else(|| format!("Symbol is not resolved: {}", symbol_name))?;
-
-                if !resolved_symbol.is_defined {
-                    return Err(format!("Relocation to undefined symbol: {}", symbol_name));
-                }
 
                 let text_section_idx = section_indices
                     .get(".text")

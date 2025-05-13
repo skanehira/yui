@@ -136,7 +136,9 @@ pub fn parse_header(
     )
     .parse(&raw[shoff..])
     .map(|(rest, mut headers)| {
-        let string_table = &raw[headers[shstrndx].offset as usize..];
+        let shstrtab = &headers[shstrndx];
+        let string_table =
+            &raw[shstrtab.offset as usize..(shstrtab.offset + shstrtab.size) as usize];
         for header in headers.iter_mut() {
             header.name = helper::get_string_by_offset(string_table, header.name_idx as usize);
         }
