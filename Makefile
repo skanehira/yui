@@ -7,6 +7,13 @@ build-obj:
 test:
 	@cargo nextest run
 
+test-shell:
+	@cargo build --release
+	@cd tests && bash run.sh
+
+test-clean:
+	@cd tests && rm -rf out
+
 build: build-obj
 	@cargo run -- a.out src/parser/fixtures/main.o src/parser/fixtures/sub.o
 
