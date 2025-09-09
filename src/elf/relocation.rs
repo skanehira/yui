@@ -1,6 +1,11 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum RelocationType {
     Aarch64AdrPrelLo21 = 274,
+    Aarch64AdrPrelPgHi21 = 275,
+    Aarch64AdrAbsLo12Nc = 277,
+    Aarch64Call26 = 283,
+    Aarch64AdrGotPage = 311,
+    Aarch64AdrGotLo12Nc = 312,
     // TODO: Add more relocation types
 }
 
