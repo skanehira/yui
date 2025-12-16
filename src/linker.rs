@@ -642,6 +642,9 @@ impl Linker {
                 target_section.data[pos..pos + 4]
                     .copy_from_slice(new_instruction.to_le_bytes().as_slice());
             }
+            _ => {
+                // TODO
+            }
         }
 
         Ok(())
