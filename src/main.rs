@@ -3,9 +3,10 @@ use std::io::Write as _;
 use std::path::Path;
 use std::process;
 
+use yui::error::LinkerError;
 use yui::linker::Linker;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), LinkerError> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 3 {

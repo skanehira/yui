@@ -4,43 +4,75 @@ pub mod output;
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, SeekFrom};
+use std::io::SeekFrom;
 use std::path::Path;
 
 use crate::elf::ELF;
 use crate::elf::symbol::{self, SymbolIndex};
 use crate::elf::{header, program_header, relocation, section, segument};
+use crate::error::{LinkerError, ObjectContext, Result, UnresolvedSymbol};
 use crate::parser;
 
 static BASE_ADDR: u64 = 0x400000;
 
-type Error = Box<dyn std::error::Error>;
-
 #[derive(Debug, Default)]
 pub struct Linker {
     objects: Vec<ELF>,
+    object_names: Vec<String>,
 }
 
 impl Linker {
     pub fn new() -> Self {
         Linker {
             objects: Vec::new(),
+            object_names: Vec::new(),
         }
     }
 
-    pub fn add_objects(&mut self, paths: &[&Path]) -> Result<(), Error> {
+    pub fn add_objects(&mut self, paths: &[&Path]) -> Result<()> {
         for path in paths {
-            let obj = fs::read(path)?;
-            let elf = parser::parse_elf(&obj)?.1;
+            let obj = fs::read(path).map_err(|e| LinkerError::Io {
+                error: e,
+                context: Some(format!("reading file: {}", path.display())),
+            })?;
+            let elf = parser::parse_elf(&obj)
+                .map_err(|e| match e {
+                    nom::Err::Error(parse_err) | nom::Err::Failure(parse_err) => {
+                        LinkerError::Parse {
+                            error: parse_err,
+                            context: Some(format!("parsing file: {}", path.display())),
+                        }
+                    }
+                    nom::Err::Incomplete(_) => LinkerError::Generic {
+                        message: "Incomplete input data".to_string(),
+                        context: Some(format!("parsing file: {}", path.display())),
+                    },
+                })?
+                .1;
             self.objects.push(elf);
+            self.object_names.push(path.display().to_string());
         }
         Ok(())
     }
 
-    pub fn link_to_file(&mut self, inputs: Vec<Vec<u8>>) -> Result<Vec<u8>, Error> {
-        for input in inputs {
-            let obj = parser::parse_elf(&input)?.1;
+    pub fn link_to_file(&mut self, inputs: Vec<Vec<u8>>) -> Result<Vec<u8>> {
+        for (idx, input) in inputs.iter().enumerate() {
+            let obj = parser::parse_elf(input)
+                .map_err(|e| match e {
+                    nom::Err::Error(parse_err) | nom::Err::Failure(parse_err) => {
+                        LinkerError::Parse {
+                            error: parse_err,
+                            context: Some(format!("parsing input object {}", idx)),
+                        }
+                    }
+                    nom::Err::Incomplete(_) => LinkerError::Generic {
+                        message: "Incomplete input data".to_string(),
+                        context: Some(format!("parsing input object {}", idx)),
+                    },
+                })?
+                .1;
             self.objects.push(obj);
+            self.object_names.push(format!("input_{}", idx));
         }
         let mut resolved_symbols = self.resolve_symbols()?;
         let (output_sections, section_name_offsets) =
@@ -137,22 +169,34 @@ impl Linker {
         resolved_symbols: HashMap<String, output::ResolvedSymbol>,
         section_tables: Vec<output::Section>,
         section_name_offsets: HashMap<String, usize>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let Some(output::ResolvedSymbol { value: entry, .. }) = resolved_symbols.get("_start")
         else {
-            return Err("sybmol _start not found".into());
+            return Err(LinkerError::MissingEntryPoint {
+                entry_symbol: "_start".to_string(),
+            });
         };
 
         let elf_header = self.create_elf_header(*entry, &section_tables);
 
-        writer.write_all(&elf_header.to_vec())?;
+        writer
+            .write_all(&elf_header.to_vec())
+            .map_err(|e| LinkerError::Io {
+                error: e,
+                context: Some("writing ELF header".to_string()),
+            })?;
 
         let program_headers = self.create_program_headers(&section_tables);
         self.write_program_headers(writer, &program_headers)?;
 
         self.write_sections(writer, &section_tables)?;
 
-        writer.seek(SeekFrom::Start(elf_header.shoff))?;
+        writer
+            .seek(SeekFrom::Start(elf_header.shoff))
+            .map_err(|e| LinkerError::Io {
+                error: e,
+                context: Some("seeking to section header table".to_string()),
+            })?;
 
         // null section header
         self.write_section_header(writer, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)?;
@@ -310,7 +354,7 @@ impl Linker {
         &self,
         writer: &mut W,
         headers: &[program_header::ProgramHeader],
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         for ph in headers {
             let mut flag: u32 = 0;
             for f in &ph.flags {
@@ -329,7 +373,10 @@ impl Linker {
             ]
             .concat();
 
-            writer.write_all(bytes)?
+            writer.write_all(bytes).map_err(|e| LinkerError::Io {
+                error: e,
+                context: Some("writing program header".to_string()),
+            })?
         }
 
         Ok(())
@@ -339,20 +386,36 @@ impl Linker {
         &self,
         writer: &mut W,
         sections: &[output::Section],
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         for section in sections {
-            writer.seek(SeekFrom::Start(section.offset))?;
-            writer.write_all(&section.data)?;
+            writer
+                .seek(SeekFrom::Start(section.offset))
+                .map_err(|e| LinkerError::Io {
+                    error: e,
+                    context: Some(format!("seeking to section {} offset", section.name)),
+                })?;
+            writer
+                .write_all(&section.data)
+                .map_err(|e| LinkerError::Io {
+                    error: e,
+                    context: Some(format!("writing section {} data", section.name)),
+                })?;
         }
 
         Ok(())
     }
 
-    pub fn resolve_symbols(&self) -> Result<HashMap<String, output::ResolvedSymbol>, Error> {
+    pub fn resolve_symbols(&self) -> Result<HashMap<String, output::ResolvedSymbol>> {
         let mut resolved_symbols: HashMap<String, output::ResolvedSymbol> = HashMap::new();
-        let mut duplicate_symbols = vec![];
+        let mut duplicate_symbols = HashMap::new();
 
         for (obj_idx, obj) in self.objects.iter().enumerate() {
+            let file_name = self
+                .object_names
+                .get(obj_idx)
+                .cloned()
+                .unwrap_or_else(|| format!("object_{}", obj_idx));
+
             for symbol in &obj.symbols {
                 let new_symbol = output::ResolvedSymbol {
                     name: symbol.name.clone(),
@@ -369,7 +432,24 @@ impl Linker {
                         if new_symbol.is_stronger_than(existing) {
                             resolved_symbols.insert(symbol.name.clone(), new_symbol);
                         } else {
-                            duplicate_symbols.push(symbol.name.clone());
+                            let existing_file_name = self
+                                .object_names
+                                .get(existing.object_index)
+                                .cloned()
+                                .unwrap_or_else(|| format!("object_{}", existing.object_index));
+                            duplicate_symbols.insert(
+                                symbol.name.clone(),
+                                (
+                                    ObjectContext {
+                                        file_name: existing_file_name,
+                                        object_index: existing.object_index,
+                                    },
+                                    ObjectContext {
+                                        file_name: file_name.clone(),
+                                        object_index: obj_idx,
+                                    },
+                                ),
+                            );
                         }
                     } else if new_symbol.is_defined && !existing.is_defined {
                         resolved_symbols.insert(symbol.name.clone(), new_symbol);
@@ -380,22 +460,36 @@ impl Linker {
             }
         }
 
-        if !duplicate_symbols.is_empty() {
-            return Err(format!("Duplicate symbols: {:?}", duplicate_symbols).into());
+        if let Some((symbol_name, (first_def, dup_def))) = duplicate_symbols.into_iter().next() {
+            return Err(LinkerError::duplicate_symbol(
+                symbol_name,
+                first_def,
+                dup_def,
+            ));
         }
 
-        let unresolved_symbols: Vec<_> = resolved_symbols
+        let unresolved_symbols: Vec<UnresolvedSymbol> = resolved_symbols
             .iter()
             .filter_map(|(_, symbol)| {
                 if symbol.is_defined {
                     return None;
                 }
-                Some(symbol.name.clone())
+                Some(UnresolvedSymbol {
+                    name: symbol.name.clone(),
+                    referenced_from: vec![ObjectContext {
+                        file_name: self
+                            .object_names
+                            .get(symbol.object_index)
+                            .cloned()
+                            .unwrap_or_else(|| format!("object_{}", symbol.object_index)),
+                        object_index: symbol.object_index,
+                    }],
+                })
             })
             .collect();
 
         if !unresolved_symbols.is_empty() {
-            return Err(format!("There are unresolved symbols: {:?}", unresolved_symbols).into());
+            return Err(LinkerError::unresolved_symbols(unresolved_symbols));
         }
 
         Ok(resolved_symbols)
@@ -404,7 +498,7 @@ impl Linker {
     pub fn layout_sections(
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(Vec<output::Section>, HashMap<String, usize>), Error> {
+    ) -> Result<(Vec<output::Section>, HashMap<String, usize>)> {
         let output_sections = self.merge_sections(&self.objects, resolved_symbols, BASE_ADDR)?;
 
         let latest_section_offset = output_sections.iter().last().unwrap().offset;
@@ -482,7 +576,7 @@ impl Linker {
         objects: &[ELF],
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
         base_addr: u64,
-    ) -> Result<Vec<output::Section>, Error> {
+    ) -> Result<Vec<output::Section>> {
         let mut raw_text_section = vec![];
         let mut raw_data_section = vec![];
 
@@ -561,7 +655,7 @@ impl Linker {
         &self,
         output_sections: &mut [output::Section],
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let section_indices: HashMap<String, usize> = output_sections
             .iter()
             .enumerate()
@@ -590,28 +684,61 @@ impl Linker {
         output_sections: &mut [output::Section],
         section_indices: &HashMap<String, usize>,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
+        let object_file_name = self
+            .object_names
+            .get(obj_idx)
+            .cloned()
+            .unwrap_or_else(|| format!("object_{}", obj_idx));
         match reloc.info.r#type {
             relocation::RelocationType::Aarch64AdrPrelLo21 => {
                 let symbol_index = reloc.info.symbol_index as usize;
                 if symbol_index >= self.objects[obj_idx].symbols.len() {
-                    return Err(format!("Symbol index out of range: {}", symbol_index));
+                    return Err(LinkerError::relocation_error(
+                        format!("Symbol index out of range: {}", symbol_index),
+                        None,
+                        Some(ObjectContext {
+                            file_name: object_file_name.clone(),
+                            object_index: obj_idx,
+                        }),
+                        Some("R_AARCH64_ADR_PREL_LO21".to_string()),
+                    ));
                 }
 
                 let symbol_name = &self.objects[obj_idx].symbols[symbol_index].name;
 
-                let resolved_symbol = resolved_symbols
-                    .get(symbol_name)
-                    .ok_or_else(|| format!("Symbol is not resolved: {}", symbol_name))?;
+                let resolved_symbol = resolved_symbols.get(symbol_name).ok_or_else(|| {
+                    LinkerError::relocation_error(
+                        "Symbol is not resolved",
+                        Some(symbol_name.clone()),
+                        Some(ObjectContext {
+                            file_name: object_file_name.clone(),
+                            object_index: obj_idx,
+                        }),
+                        Some("R_AARCH64_ADR_PREL_LO21".to_string()),
+                    )
+                })?;
 
-                let text_section_idx = section_indices
-                    .get(".text")
-                    .ok_or_else(|| "Relocation target section not found: .text".to_string())?;
+                let text_section_idx =
+                    section_indices
+                        .get(".text")
+                        .ok_or_else(|| LinkerError::SectionNotFound {
+                            section_name: ".text".to_string(),
+                            context: Some("applying relocation".to_string()),
+                        })?;
 
                 let target_section = &mut output_sections[*text_section_idx];
 
                 if reloc.offset as usize >= target_section.data.len() {
-                    return Err(format!("Relocation offset out of range: {}", reloc.offset));
+                    return Err(LinkerError::relocation_error(
+                        format!("Relocation offset out of range: {}", reloc.offset),
+                        Some(symbol_name.clone()),
+                        Some(ObjectContext {
+                            file_name: object_file_name,
+                            object_index: obj_idx,
+                        }),
+                        Some("R_AARCH64_ADR_PREL_LO21".to_string()),
+                    ));
                 }
 
                 let instruction_addr = target_section.addr + reloc.offset;
@@ -678,7 +805,7 @@ impl Linker {
         sh_info: u32,
         sh_addralign: u64,
         sh_entsize: u64,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let bytes = [
             name.to_le_bytes().as_slice(),
             sh_type.to_le_bytes().as_slice(),
@@ -693,7 +820,10 @@ impl Linker {
         ]
         .concat();
 
-        writer.write_all(&bytes)
+        writer.write_all(&bytes).map_err(|e| LinkerError::Io {
+            error: e,
+            context: Some("writing section header".to_string()),
+        })
     }
 }
 
