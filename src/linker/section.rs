@@ -272,7 +272,7 @@ fn write_symbol_entry(
 /// # Example
 ///
 /// ```
-/// use yui::linker::section::align;
+/// use yui::linker::align;
 /// let aligned = align(10, 8); // Results in 16
 /// let already_aligned = align(16, 8); // Remains 16
 /// ```
