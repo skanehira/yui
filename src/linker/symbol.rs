@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::elf::symbol::SymbolIndex;
 use crate::error::{LinkerError, ObjectContext, Result, UnresolvedSymbol};
 
-use super::output::ResolvedSymbol;
 use super::Linker;
+use super::output::ResolvedSymbol;
 
 impl Linker {
     pub fn resolve_symbols(&self) -> Result<HashMap<String, ResolvedSymbol>> {

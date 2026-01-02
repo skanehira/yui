@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::elf::relocation;
 use crate::error::{LinkerError, ObjectContext, Result};
 
-use super::output::{ResolvedSymbol, Section};
 use super::Linker;
+use super::output::{ResolvedSymbol, Section};
 
 impl Linker {
     pub fn apply_relocations(

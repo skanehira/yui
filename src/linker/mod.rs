@@ -11,7 +11,7 @@ use crate::elf::ELF;
 use crate::error::{LinkerError, Result};
 use crate::parser;
 
-pub use section::{align, BASE_ADDR};
+pub use section::{BASE_ADDR, align};
 
 #[derive(Debug, Default)]
 pub struct Linker {

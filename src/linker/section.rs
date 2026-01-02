@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use crate::elf::ELF;
 use crate::elf::section::{self, SectionType};
 use crate::elf::symbol;
-use crate::elf::ELF;
 use crate::error::Result;
 
-use super::output::{ResolvedSymbol, Section};
 use super::Linker;
+use super::output::{ResolvedSymbol, Section};
 
 /// Base address for the executable
 pub static BASE_ADDR: u64 = 0x400000;

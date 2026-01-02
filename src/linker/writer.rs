@@ -4,9 +4,9 @@ use std::io::{SeekFrom, Write};
 use crate::elf::{header, program_header, segument};
 use crate::error::{LinkerError, Result};
 
-use super::output::{ResolvedSymbol, Section};
-use super::section::{align, BASE_ADDR};
 use super::Linker;
+use super::output::{ResolvedSymbol, Section};
+use super::section::{BASE_ADDR, align};
 
 #[derive(Debug, Default)]
 struct SectionHeaderEntry {
