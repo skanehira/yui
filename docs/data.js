@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1766366332825,
+  "lastUpdate": 1767322852177,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -1007,6 +1007,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 969.06,
             "range": "± 11.5",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "kanehira.sho@techlead-it.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "committer": {
+            "email": "kanehira.sho@techlead-it.com",
+            "name": "skanehira",
+            "username": "skanehira"
+          },
+          "distinct": true,
+          "id": "a2a6e95c3a3114c382628c5829551f7ec1a1a052",
+          "message": "fix: update doctest path for align function\n\nUse public re-export path yui::linker::align instead of private\nmodule path yui::linker::section::align.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
+          "timestamp": "2026-01-02T12:00:10+09:00",
+          "tree_id": "a75777c436ba201d589f0cdd187c166812105c94",
+          "url": "https://github.com/skanehira/yui/commit/a2a6e95c3a3114c382628c5829551f7ec1a1a052"
+        },
+        "date": 1767322851786,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 95.63,
+            "range": "± 1.32",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 965.91,
+            "range": "± 8.41",
             "unit": "ns/iter"
           }
         ]
