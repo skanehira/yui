@@ -1,14 +1,16 @@
+use std::borrow::Cow;
+
 use crate::elf::{section, symbol};
 
 #[derive(Debug, Clone)]
-pub struct Section {
-    pub name: String,
+pub struct Section<'a> {
+    pub name: Cow<'a, str>,
     pub r#type: section::SectionType,
     pub flags: Vec<section::SectionFlag>,
     pub addr: u64,
     pub offset: u64,
     pub size: u64,
-    pub data: Vec<u8>,
+    pub data: Cow<'a, [u8]>,
     pub align: u64,
 }
 

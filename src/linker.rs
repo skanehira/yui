@@ -2,13 +2,14 @@
 
 pub mod output;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::io::SeekFrom;
 use std::path::Path;
 
-use crate::elf::ELF;
 use crate::elf::symbol::{self, SymbolIndex};
+use crate::elf::ELF;
 use crate::elf::{header, program_header, relocation, section, segument};
 use crate::error::{LinkerError, ObjectContext, Result, UnresolvedSymbol};
 use crate::parser;
@@ -93,7 +94,7 @@ impl Linker {
         &self,
         latest_section_offset: u64,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
-    ) -> (output::Section, output::Section) {
+    ) -> (output::Section<'static>, output::Section<'static>) {
         // symbol string table
         // includes null string
         let mut strtab: Vec<u8> = vec![0];
@@ -139,24 +140,24 @@ impl Linker {
         }
 
         let strtab_section = output::Section {
-            name: ".strtab".to_string(),
+            name: Cow::Borrowed(".strtab"),
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
             offset: latest_section_offset + 1,
             size: strtab.len() as u64,
-            data: strtab,
+            data: Cow::Owned(strtab),
             align: 1,
         };
 
         let symtab_section = output::Section {
-            name: ".symtab".to_string(),
+            name: Cow::Borrowed(".symtab"),
             r#type: section::SectionType::SymTab,
             flags: vec![],
             addr: 0,
             offset: align(strtab_section.offset + strtab_section.size, 8),
             size: symtab.len() as u64,
-            data: symtab,
+            data: Cow::Owned(symtab),
             align: 8,
         };
 
@@ -167,7 +168,7 @@ impl Linker {
         &self,
         writer: &mut W,
         resolved_symbols: HashMap<String, output::ResolvedSymbol>,
-        section_tables: Vec<output::Section>,
+        section_tables: Vec<output::Section<'static>>,
         section_name_offsets: HashMap<String, usize>,
     ) -> Result<()> {
         let Some(output::ResolvedSymbol { value: entry, .. }) = resolved_symbols.get("_start")
@@ -203,7 +204,9 @@ impl Linker {
 
         // section headers
         for section in section_tables.iter() {
-            let name_offset = *section_name_offsets.get(&section.name).unwrap_or(&0);
+            let name_offset = *section_name_offsets
+                .get(section.name.as_ref())
+                .unwrap_or(&0);
             let sh_type = section.r#type as u32;
             let mut sh_flags: u64 = 0;
             for f in &section.flags {
@@ -248,7 +251,11 @@ impl Linker {
         Ok(())
     }
 
-    fn create_elf_header(&self, entry: u64, section_tables: &[output::Section]) -> header::Header {
+    fn create_elf_header(
+        &self,
+        entry: u64,
+        section_tables: &[output::Section<'static>],
+    ) -> header::Header {
         // section header offset is after all sections
         let shoff = section_tables
             .iter()
@@ -289,7 +296,7 @@ impl Linker {
         }
     }
 
-    fn count_program_headers(&self, output_sections: &[output::Section]) -> u16 {
+    fn count_program_headers(&self, output_sections: &[output::Section<'static>]) -> u16 {
         let sym_map = HashMap::<&str, ()>::from_iter([
             (".text", ()),
             (".data", ()),
@@ -303,18 +310,18 @@ impl Linker {
         ]);
         output_sections
             .iter()
-            .filter(|s| sym_map.contains_key(s.name.as_str()))
+            .filter(|s| sym_map.contains_key(s.name.as_ref()))
             .count() as u16
     }
 
     fn create_program_headers(
         &self,
-        output_sections: &[output::Section],
+        output_sections: &[output::Section<'static>],
     ) -> Vec<program_header::ProgramHeader> {
         let mut program_headers = Vec::new();
 
         for s in output_sections.iter() {
-            match s.name.as_str() {
+            match s.name.as_ref() {
                 ".text" => {
                     let text_ph = program_header::ProgramHeader {
                         r#type: segument::Type::Load,
@@ -385,7 +392,7 @@ impl Linker {
     fn write_sections<W: std::io::Write + std::io::Seek>(
         &self,
         writer: &mut W,
-        sections: &[output::Section],
+        sections: &[output::Section<'static>],
     ) -> Result<()> {
         for section in sections {
             writer
@@ -395,7 +402,7 @@ impl Linker {
                     context: Some(format!("seeking to section {} offset", section.name)),
                 })?;
             writer
-                .write_all(&section.data)
+                .write_all(section.data.as_ref())
                 .map_err(|e| LinkerError::Io {
                     error: e,
                     context: Some(format!("writing section {} data", section.name)),
@@ -498,7 +505,7 @@ impl Linker {
     pub fn layout_sections(
         &self,
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
-    ) -> Result<(Vec<output::Section>, HashMap<String, usize>)> {
+    ) -> Result<(Vec<output::Section<'static>>, HashMap<String, usize>)> {
         let output_sections = self.merge_sections(&self.objects, resolved_symbols, BASE_ADDR)?;
 
         let latest_section_offset = output_sections.iter().last().unwrap().offset;
@@ -512,7 +519,7 @@ impl Linker {
         shstrtab.push(0);
 
         for section in output_sections.iter() {
-            section_name_offsets.insert(section.name.clone(), shstrtab.len());
+            section_name_offsets.insert(section.name.to_string(), shstrtab.len());
             shstrtab.extend_from_slice(section.name.as_bytes());
             shstrtab.push(0);
         }
@@ -530,26 +537,21 @@ impl Linker {
         shstrtab.push(0);
 
         let shstrtab_section = output::Section {
-            name: ".shstrtab".to_string(),
+            name: Cow::Borrowed(".shstrtab"),
             r#type: section::SectionType::StrTab,
             flags: vec![],
             addr: 0,
             offset: align(symtab_section.offset + symtab_section.size, 8),
             size: shstrtab.len() as u64,
-            data: shstrtab,
+            data: Cow::Owned(shstrtab),
             align: 1,
         };
 
-        let section_tables = [
-            // .text, .data, .bss, etc...
-            output_sections.as_slice(),
-            &[
-                symtab_section.clone(),
-                strtab_section.clone(),
-                shstrtab_section.clone(),
-            ],
-        ]
-        .concat();
+        // Combine sections using push instead of concat to avoid clone
+        let mut section_tables = output_sections;
+        section_tables.push(symtab_section);
+        section_tables.push(strtab_section);
+        section_tables.push(shstrtab_section);
 
         Ok((section_tables, section_name_offsets))
     }
@@ -576,7 +578,7 @@ impl Linker {
         objects: &[ELF],
         resolved_symbols: &mut HashMap<String, output::ResolvedSymbol>,
         base_addr: u64,
-    ) -> Result<Vec<output::Section>> {
+    ) -> Result<Vec<output::Section<'static>>> {
         let mut raw_text_section = vec![];
         let mut raw_data_section = vec![];
 
@@ -611,26 +613,26 @@ impl Linker {
         let text_addr = align(base_addr + text_offset, 4);
 
         let text_section = output::Section {
-            name: ".text".to_string(),
+            name: Cow::Borrowed(".text"),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::ExecInstr],
             addr: text_addr,
             offset: text_offset,
             size: raw_text_section.len() as u64,
-            data: raw_text_section,
+            data: Cow::Owned(raw_text_section),
             align: 4,
         };
 
         let data_offset = text_offset + text_section.size;
         let data_base_addr = align(text_section.addr + text_section.size + 0x10000, 4);
         let data_section = output::Section {
-            name: ".data".to_string(),
+            name: Cow::Borrowed(".data"),
             r#type: section::SectionType::ProgBits,
             flags: vec![section::SectionFlag::Alloc, section::SectionFlag::Write],
             addr: data_base_addr,
             offset: data_offset,
             size: raw_data_section.len() as u64,
-            data: raw_data_section,
+            data: Cow::Owned(raw_data_section),
             align: 4,
         };
 
@@ -653,13 +655,13 @@ impl Linker {
 
     pub fn apply_relocations(
         &self,
-        output_sections: &mut [output::Section],
+        output_sections: &mut [output::Section<'static>],
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> Result<()> {
         let section_indices: HashMap<String, usize> = output_sections
             .iter()
             .enumerate()
-            .map(|(i, sec)| (sec.name.clone(), i))
+            .map(|(i, sec)| (sec.name.to_string(), i))
             .collect();
 
         for (obj_idx, obj) in self.objects.iter().enumerate() {
@@ -681,7 +683,7 @@ impl Linker {
         &self,
         obj_idx: usize,
         reloc: &relocation::RelocationAddend,
-        output_sections: &mut [output::Section],
+        output_sections: &mut [output::Section<'static>],
         section_indices: &HashMap<String, usize>,
         resolved_symbols: &HashMap<String, output::ResolvedSymbol>,
     ) -> Result<()> {
@@ -750,8 +752,8 @@ impl Linker {
                     ((symbol_addr as i64) - (instruction_addr as i64) + reloc.addend) as i32;
 
                 let pos = reloc.offset as usize;
-                let instruction =
-                    u32::from_le_bytes(target_section.data[pos..pos + 4].try_into().unwrap());
+                let data = target_section.data.to_mut();
+                let instruction = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap());
 
                 // Keeps opcode and register portion of the ADR instruction
                 // ADR instruction format: 0bxxx10000 iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
@@ -766,8 +768,7 @@ impl Linker {
 
                 let new_instruction = opcode_rd | immlo | immhi;
 
-                target_section.data[pos..pos + 4]
-                    .copy_from_slice(new_instruction.to_le_bytes().as_slice());
+                data[pos..pos + 4].copy_from_slice(new_instruction.to_le_bytes().as_slice());
             }
         }
 
