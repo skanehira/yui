@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1767590088008,
+  "lastUpdate": 1768785037614,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -1115,6 +1115,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1003.17,
             "range": "± 15.25",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "84588c6b46d1bea9a7361ba424955a41f05aafd3",
+          "message": "chore(deps): bump thiserror from 2.0.17 to 2.0.18 (#16)\n\nBumps [thiserror](https://github.com/dtolnay/thiserror) from 2.0.17 to 2.0.18.\n- [Release notes](https://github.com/dtolnay/thiserror/releases)\n- [Commits](https://github.com/dtolnay/thiserror/compare/2.0.17...2.0.18)\n\n---\nupdated-dependencies:\n- dependency-name: thiserror\n  dependency-version: 2.0.18\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-01-19T10:10:03+09:00",
+          "tree_id": "f270d6fc57627640743710fbe081b2530eda4c36",
+          "url": "https://github.com/skanehira/yui/commit/84588c6b46d1bea9a7361ba424955a41f05aafd3"
+        },
+        "date": 1768785037213,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 95.55,
+            "range": "± 3.65",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 1023.06,
+            "range": "± 42.18",
             "unit": "ns/iter"
           }
         ]
