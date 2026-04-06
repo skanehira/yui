@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774841824787,
+  "lastUpdate": 1775435984872,
   "repoUrl": "https://github.com/skanehira/yui",
   "entries": {
     "Rust Benchmark": [
@@ -1295,6 +1295,42 @@ window.BENCHMARK_DATA = {
             "name": "tests::bench_parse_section_header_table",
             "value": 1027.8,
             "range": "± 13.44",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3026bf4d4d6e90e66f07e0b00de28bd74b61d73e",
+          "message": "chore(deps): bump insta from 1.47.1 to 1.47.2 (#22)\n\nBumps [insta](https://github.com/mitsuhiko/insta) from 1.47.1 to 1.47.2.\n- [Release notes](https://github.com/mitsuhiko/insta/releases)\n- [Changelog](https://github.com/mitsuhiko/insta/blob/master/CHANGELOG.md)\n- [Commits](https://github.com/mitsuhiko/insta/compare/1.47.1...1.47.2)\n\n---\nupdated-dependencies:\n- dependency-name: insta\n  dependency-version: 1.47.2\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-04-06T09:39:12+09:00",
+          "tree_id": "54968d5ee00e22cbb98c03be88aaa2a9fc99f44c",
+          "url": "https://github.com/skanehira/yui/commit/3026bf4d4d6e90e66f07e0b00de28bd74b61d73e"
+        },
+        "date": 1775435984547,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tests::bench_parse_elf_header",
+            "value": 97.27,
+            "range": "± 2.52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tests::bench_parse_section_header_table",
+            "value": 991.35,
+            "range": "± 27.56",
             "unit": "ns/iter"
           }
         ]
